@@ -1,0 +1,19 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  project: one
+  status: 1
+  seed_keywords: MyText
+  total_keywords_found: 1
+  started_at: 2025-10-11 17:49:59
+  completed_at: 2025-10-11 17:49:59
+  error_message: MyText
+
+two:
+  project: two
+  status: 1
+  seed_keywords: MyText
+  total_keywords_found: 1
+  started_at: 2025-10-11 17:49:59
+  completed_at: 2025-10-11 17:49:59
+  error_message: MyText

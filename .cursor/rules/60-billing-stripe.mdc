@@ -1,0 +1,11 @@
+---
+name: billing-stripe
+patterns:
+  include: ["app/controllers/billing_controller.rb","app/controllers/webhooks_controller.rb","app/models/**/*","db/migrate/*"]
+---
+# Billing (Stripe via Pay)
+
+- Use **lookup_key** for prices; avoid hardcoded IDs.
+- Webhooks: verify signature; handle idempotently; minimal logging.
+- Customer portal via Stripe session redirect; never expose raw IDs.
+- Trials/grace periods: model clearly; surface in Settings UI.

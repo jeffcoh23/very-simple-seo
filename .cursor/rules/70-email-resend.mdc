@@ -1,0 +1,10 @@
+---
+name: email-resend
+patterns:
+  include: ["config/environments/*","app/mailers/**/*","app/views/**/*"]
+---
+# Email (Resend prod + letter_opener dev)
+
+- Prod: SMTP via Resend; default URL options present.
+- Dev: `letter_opener_web` only.
+- Keep templates minimal and safe; add unsubscribe for marketing emails.

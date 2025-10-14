@@ -1,0 +1,15 @@
+---
+name: project-guardrails
+patterns:
+  include: ["**/*"]
+  exclude: ["node_modules/**","tmp/**","log/**","vendor/**","public/assets/**","db/schema.rb"]
+---
+# Guardrails (apply to all changes)
+
+- **Always write/update tests** when behavior changes or a bug is fixed.
+- Keep diffs small; separate refactors from behavior changes.
+- Document risks and acceptance checks in the PR body.
+- Never log secrets; avoid printing tokens/keys.
+- For public endpoints, apply rack-attack and explicit authorization.
+
+**Done means**: code compiles, tests pass, lint/build ok, PR summary written.

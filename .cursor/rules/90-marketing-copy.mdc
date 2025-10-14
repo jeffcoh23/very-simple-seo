@@ -1,0 +1,12 @@
+---
+name: marketing-copy
+patterns:
+  include: ["app/frontend/**/*","app/views/**/*","docs/marketing/**/*"]
+  exclude: ["node_modules/**","tmp/**","log/**","vendor/**"]
+---
+# Marketing Copy & UX Tone
+
+- Tone: clear, confident, specific; avoid hype and vague superlatives.
+- Hero: outcome-led headline (≤ 8 words), supportive subhead (≤ 20), 3 concise benefits.
+- CTAs: 1 primary action per screen; verbs that imply value (e.g., "Start free").
+- Accessibility: readable contrast, descriptive alt text, meaningful link labels.

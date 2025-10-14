@@ -1,0 +1,11 @@
+---
+name: testing
+patterns:
+  include: ["spec/**/*","app/**/*"]
+---
+# Testing
+
+- Request specs for controllers; system specs for flows.
+- FactoryBot over fixtures; stub external services (Stripe/Resend).
+- Add focused tests that fail before the fix when changing behavior.
+- Keep specs deterministic and fast; minimize sleeps and global state.

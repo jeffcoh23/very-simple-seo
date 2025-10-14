@@ -1,0 +1,13 @@
+---
+name: rails-foundations
+patterns:
+  include: ["app/**/*","config/**/*","db/**/*.rb"]
+  exclude: ["db/schema.rb"]
+---
+# Rails 8 Foundations
+
+- Controllers thin; push logic to `app/services` and queries to `app/queries`.
+- Jobs via Solid Queue; make jobs **idempotent**.
+- Avoid N+1; use `includes` judiciously; select columns; add scopes.
+- Strong params only; never `.permit!`.
+- Migrations: safe operations; backfill in batches; mind lock time.

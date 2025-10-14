@@ -1,0 +1,10 @@
+---
+name: seo-analytics
+patterns:
+  include: ["app/views/shared/_head_meta.html.erb","config/sitemap.rb","lib/tasks/sitemap.rake","app/views/shared/_analytics.html.erb"]
+---
+# SEO + Analytics
+
+- OG/Twitter tags present on marketing pages.
+- Sitemap task maintained; include priority routes.
+- GA loaded only in production with env guard.

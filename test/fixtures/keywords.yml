@@ -1,0 +1,31 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  keyword_research: one
+  keyword: MyString
+  volume: 1
+  difficulty: 1
+  opportunity: 1
+  cpc: 9.99
+  intent: MyString
+  sources: MyText
+  published: false
+  starred: false
+  queued_for_generation: false
+  scheduled_for: 2025-10-11 17:50:10
+  generation_status: 1
+
+two:
+  keyword_research: two
+  keyword: MyString
+  volume: 1
+  difficulty: 1
+  opportunity: 1
+  cpc: 9.99
+  intent: MyString
+  sources: MyText
+  published: false
+  starred: false
+  queued_for_generation: false
+  scheduled_for: 2025-10-11 17:50:10
+  generation_status: 1

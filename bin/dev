@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+if ! command -v foreman >/dev/null 2>&1; then
+  echo "Installing foreman..."
+  gem install foreman --no-document
+fi
+cat > Procfile.dev <<'PROC'
+web: bin/rails server
+vite: bin/vite dev
+PROC
+exec foreman start -f Procfile.dev

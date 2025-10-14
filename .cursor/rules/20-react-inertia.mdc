@@ -1,0 +1,11 @@
+---
+name: react-inertia
+patterns:
+  include: ["app/frontend/**/*.{js,jsx,ts,tsx}"]
+---
+# React + Inertia
+
+- Pages in `app/frontend/pages/**`, components in `app/frontend/components/**`, hooks in `app/frontend/lib/**`.
+- Accessible UI: keyboard focus, ARIA where needed; test interactive states.
+- Keep state local; derive server data from props; avoid global stores until necessary.
+- Co-locate small components; extract only when reused.

@@ -1,0 +1,661 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler/setup"
+require "net/http"
+require "json"
+require "uri"
+require "nokogiri"
+require "open-uri"
+require "dotenv"
+
+# Load environment variables for Google Ads API
+Dotenv.load
+
+# Load our services
+require_relative "lib/google_ads_service"
+require_relative "lib/seed_keyword_generator"
+
+# Keyword Research Script for SignalLab
+# Finds the best keywords to target for SEO content
+
+class KeywordResearcher
+  COMPETITORS = [
+    "founderpal.ai",
+    "validatorai.com",
+    "ideaproof.io",
+    "dimeadozen.ai",
+    "ideabuddy.com"
+  ]
+
+  def initialize
+    @keywords = {}
+    @google_ads = GoogleAdsService.new
+    @seed_generator = SeedKeywordGenerator.new(
+      product_domain: "signallab.app",
+      competitor_domains: COMPETITORS
+    )
+  end
+
+  def run
+    puts "🔍 Starting keyword research for SignalLab..."
+    puts "=" * 80
+
+    # Step 1: Generate seed keywords
+    puts "\n🌱 Generating seed keywords..."
+    @seed_keywords = @seed_generator.generate_seeds
+
+    # Step 2: Expand seed keywords
+    puts "\n📝 Expanding seed keywords..."
+    expand_keywords
+
+    # Step 3: Analyze competitors
+    puts "\n🎯 Analyzing competitor keywords..."
+    analyze_competitors
+
+    # Step 4: Get real metrics from Google Ads API (or fall back to heuristics)
+    puts "\n📊 Fetching keyword metrics..."
+    calculate_metrics
+
+    # Step 5: Rank and output
+    puts "\n🏆 Ranking keywords by opportunity..."
+    output_results
+  end
+
+  private
+
+  def expand_keywords
+    @seed_keywords.each do |seed|
+      puts "  Expanding: #{seed}"
+
+      # Add the seed itself
+      add_keyword(seed)
+
+      # Get Google autocomplete suggestions
+      suggestions = get_google_suggestions(seed)
+      suggestions.each { |kw| add_keyword(kw, source: "autocomplete") }
+
+      # Scrape real Google "People Also Ask" questions
+      paa = scrape_people_also_ask(seed)
+      paa.each { |kw| add_keyword(kw, source: "people_also_ask") }
+
+      # Scrape real Google "Related Searches"
+      related = scrape_related_searches(seed)
+      related.each { |kw| add_keyword(kw, source: "related_searches") }
+
+      # Mine Reddit for real user questions
+      reddit = mine_reddit_topics(seed)
+      reddit.each { |kw| add_keyword(kw, source: "reddit") }
+
+      sleep 1 # Be nice to Google
+    end
+
+    puts "  Found #{@keywords.size} unique keywords"
+  end
+
+  def get_google_suggestions(query)
+    # Google autocomplete API
+    uri = URI("http://suggestqueries.google.com/complete/search")
+    params = { client: "firefox", q: query }
+    uri.query = URI.encode_www_form(params)
+
+    begin
+      response = Net::HTTP.get(uri)
+      data = JSON.parse(response)
+      data[1] || [] # Second element contains suggestions
+    rescue => e
+      puts "    ⚠️  Error fetching suggestions: #{e.message}"
+      []
+    end
+  end
+
+  def scrape_people_also_ask(keyword)
+    puts "    Scraping People Also Ask..."
+
+    begin
+      uri = URI("https://www.google.com/search?q=#{URI.encode_www_form_component(keyword)}")
+      request = Net::HTTP::Get.new(uri)
+      request["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+
+      response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) do |http|
+        http.request(request)
+      end
+
+      doc = Nokogiri::HTML(response.body)
+
+      # Extract PAA questions (Google's structure changes, so try multiple selectors)
+      paa_questions = []
+
+      # Try common PAA selectors
+      paa_questions += doc.css('[jsname="yEVEE"]').map(&:text)
+      paa_questions += doc.css('.related-question-pair span').map(&:text)
+      paa_questions += doc.css('[role="heading"]').map(&:text).select { |q| q.include?('?') }
+
+      paa_questions = paa_questions.compact.uniq.reject(&:empty?)
+
+      puts "      ✓ Found #{paa_questions.size} PAA questions" if paa_questions.any?
+      paa_questions
+    rescue => e
+      puts "      ⚠️  PAA scraping failed: #{e.message}"
+      []
+    end
+  end
+
+  def scrape_related_searches(keyword)
+    puts "    Scraping Related Searches..."
+
+    begin
+      uri = URI("https://www.google.com/search?q=#{URI.encode_www_form_component(keyword)}")
+      request = Net::HTTP::Get.new(uri)
+      request["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+
+      response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) do |http|
+        http.request(request)
+      end
+
+      doc = Nokogiri::HTML(response.body)
+
+      # Extract related searches (usually at bottom of page)
+      related = []
+
+      # Try common related search selectors
+      related += doc.css('.k8XOCe').map(&:text)
+      related += doc.css('.s75CSd').map(&:text)
+      related += doc.css('[data-ved] a').map(&:text).select { |t| t.length > 10 && t.length < 100 }
+
+      related = related.compact.uniq.reject(&:empty?).map(&:downcase)
+
+      puts "      ✓ Found #{related.size} related searches" if related.any?
+      related
+    rescue => e
+      puts "      ⚠️  Related searches scraping failed: #{e.message}"
+      []
+    end
+  end
+
+  def mine_reddit_topics(keyword)
+    puts "    Mining Reddit..."
+
+    begin
+      # Reddit search API (free, no auth required)
+      query = URI.encode_www_form_component(keyword)
+      uri = URI("https://www.reddit.com/search.json?q=#{query}&limit=50&sort=relevance")
+
+      request = Net::HTTP::Get.new(uri)
+      request["User-Agent"] = "Mozilla/5.0 (compatible; KeywordResearcher/1.0)"
+
+      response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) do |http|
+        http.request(request)
+      end
+
+      data = JSON.parse(response.body)
+
+      # Extract post titles
+      titles = data.dig('data', 'children')&.map { |post| post.dig('data', 'title') } || []
+
+      # Extract keywords from titles (questions and phrases)
+      keywords = titles.flat_map do |title|
+        extract_keywords_from_text(title, keyword)
+      end
+
+      keywords = keywords.compact.uniq.reject(&:empty?)
+
+      puts "      ✓ Found #{keywords.size} keywords from Reddit" if keywords.any?
+      keywords
+    rescue => e
+      puts "      ⚠️  Reddit mining failed: #{e.message}"
+      []
+    end
+  end
+
+  def extract_keywords_from_text(text, seed_keyword)
+    return [] if text.nil? || text.empty?
+
+    keywords = []
+    text = text.downcase
+
+    # Extract question-based keywords
+    if text.include?('how to')
+      keywords << text[/how to [^?.!]+/]
+    end
+
+    if text.include?('what is')
+      keywords << text[/what is [^?.!]+/]
+    end
+
+    if text.include?('best way')
+      keywords << text[/best way [^?.!]+/]
+    end
+
+    # Extract phrases containing the current seed keyword
+    if text.include?(seed_keyword.downcase)
+      # Extract 5 words before and after
+      match = text[/.{0,50}#{Regexp.escape(seed_keyword.downcase)}.{0,50}/]
+      keywords << match if match
+    end
+
+    keywords.compact.map(&:strip)
+  end
+
+  def analyze_competitors
+    COMPETITORS.each do |domain|
+      puts "  Analyzing: #{domain}"
+
+      # Scrape sitemap for page URLs
+      sitemap_keywords = scrape_competitor_sitemap(domain)
+      sitemap_keywords.each { |kw| add_keyword(kw, source: domain) }
+
+      # Scrape homepage and key pages for titles/H1s
+      page_keywords = scrape_competitor_pages(domain)
+      page_keywords.each { |kw| add_keyword(kw, source: domain) }
+
+      sleep 1 # Be nice to competitors
+    end
+  end
+
+  def scrape_competitor_sitemap(domain)
+    puts "    Scraping sitemap..."
+
+    sitemap_urls = [
+      "https://#{domain}/sitemap.xml",
+      "https://#{domain}/sitemap_index.xml",
+      "https://www.#{domain}/sitemap.xml"
+    ]
+
+    keywords = []
+
+    sitemap_urls.each do |sitemap_url|
+      begin
+        uri = URI(sitemap_url)
+        request = Net::HTTP::Get.new(uri)
+        request["User-Agent"] = "Mozilla/5.0 (compatible; KeywordResearcher/1.0)"
+
+        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) do |http|
+          http.request(request)
+        end
+
+        next unless response.code == '200'
+
+        xml = Nokogiri::XML(response.body)
+
+        # Extract URLs from sitemap
+        urls = xml.xpath('//xmlns:loc').map(&:text)
+
+        # Convert URLs to keywords
+        urls.each do |url|
+          # Extract path segment: "https://validatorai.com/validate-startup-idea" → "validate startup idea"
+          path = URI(url).path
+          segments = path.split('/').reject(&:empty?)
+
+          segments.each do |segment|
+            keyword = segment.gsub(/[-_]/, ' ').downcase
+            keywords << keyword if keyword.length > 5 && keyword.length < 100
+          end
+        end
+
+        puts "      ✓ Found #{urls.size} pages in sitemap"
+        break # Found a working sitemap
+      rescue => e
+        # Try next sitemap URL
+        next
+      end
+    end
+
+    puts "      ⚠️  No sitemap found" if keywords.empty?
+    keywords.uniq
+  end
+
+  def scrape_competitor_pages(domain)
+    puts "    Scraping key pages..."
+
+    keywords = []
+    urls_to_check = [
+      "https://#{domain}",
+      "https://#{domain}/features",
+      "https://#{domain}/pricing",
+      "https://#{domain}/blog"
+    ]
+
+    urls_to_check.each do |url|
+      begin
+        uri = URI(url)
+        request = Net::HTTP::Get.new(uri)
+        request["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+
+        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 10) do |http|
+          http.request(request)
+        end
+
+        next unless response.code == '200'
+
+        doc = Nokogiri::HTML(response.body)
+
+        # Extract title tag
+        title = doc.at_css('title')&.text
+        keywords << title.downcase if title && title.length < 100
+
+        # Extract H1s
+        h1s = doc.css('h1').map(&:text).map(&:downcase)
+        keywords.concat(h1s.select { |h| h.length > 5 && h.length < 100 })
+
+        # Extract H2s (might contain keyword phrases)
+        h2s = doc.css('h2').map(&:text).map(&:downcase)
+        keywords.concat(h2s.select { |h| h.length > 5 && h.length < 100 })
+
+        # Extract meta description
+        meta_desc = doc.at_css('meta[name="description"]')
+        keywords << meta_desc['content'].downcase if meta_desc && meta_desc['content']
+
+      rescue => e
+        # Page failed, continue to next
+        next
+      end
+    end
+
+    puts "      ✓ Found #{keywords.size} keywords from pages" if keywords.any?
+    keywords.compact.uniq
+  end
+
+  def add_keyword(keyword, source: "seed")
+    keyword = keyword.downcase.strip
+    return if keyword.empty?
+    return if keyword.length > 100 # Too long (likely sentence, not keyword)
+
+    @keywords[keyword] ||= {
+      keyword: keyword,
+      sources: [],
+      volume: nil,
+      difficulty: nil,
+      cpc: nil,
+      opportunity: nil,
+      intent: nil
+    }
+
+    @keywords[keyword][:sources] << source unless @keywords[keyword][:sources].include?(source)
+  end
+
+  def calculate_metrics
+    # Try to get real metrics from Google Ads API
+    all_keywords = @keywords.keys
+
+    puts "  Fetching metrics for #{all_keywords.size} keywords..."
+    real_metrics = @google_ads.get_keyword_metrics(all_keywords)
+
+    if real_metrics
+      puts "  ✓ Using real Google Ads data for metrics"
+      apply_real_metrics(real_metrics)
+    else
+      puts "  ⚠️  Using heuristic estimates (Google Ads API not configured)"
+      apply_heuristic_metrics
+    end
+  end
+
+  def apply_real_metrics(real_metrics)
+    @keywords.each do |kw, data|
+      if real_metrics[kw]
+        # Use real data from Google Ads API
+        data[:volume] = real_metrics[kw][:volume]
+        data[:difficulty] = real_metrics[kw][:difficulty]
+        data[:cpc] = real_metrics[kw][:cpc]
+        data[:competition_level] = real_metrics[kw][:competition_level]
+      else
+        # Fall back to heuristics for keywords not in Google Ads response
+        data[:volume] = estimate_volume(kw)
+        data[:difficulty] = estimate_difficulty(kw)
+        data[:cpc] = estimate_cpc(kw)
+      end
+
+      # Always determine intent ourselves
+      data[:intent] = determine_intent(kw)
+
+      # Calculate opportunity score
+      data[:opportunity] = calculate_opportunity(data)
+    end
+
+    # Filter by volume (only when using real metrics)
+    # Remove keywords with no real search demand or too competitive
+    puts "  Filtering by search volume..."
+    before_count = @keywords.size
+    @keywords.reject! { |kw, data| data[:volume] < 100 || data[:volume] > 50000 }
+    removed = before_count - @keywords.size
+    puts "  ✓ Removed #{removed} keywords (low/no volume or too competitive)" if removed > 0
+  end
+
+  def apply_heuristic_metrics
+    @keywords.each do |kw, data|
+      # Estimate search volume (heuristic)
+      data[:volume] = estimate_volume(kw)
+
+      # Estimate difficulty (heuristic)
+      data[:difficulty] = estimate_difficulty(kw)
+
+      # Estimate CPC (heuristic)
+      data[:cpc] = estimate_cpc(kw)
+
+      # Determine search intent
+      data[:intent] = determine_intent(kw)
+
+      # Calculate opportunity score (0-100)
+      data[:opportunity] = calculate_opportunity(data)
+    end
+  end
+
+  def estimate_volume(keyword)
+    # Simple heuristic based on keyword characteristics
+    # In reality, you'd use SEMrush/Ahrefs API
+
+    base = 100
+
+    # Shorter keywords = higher volume usually
+    base += (50 - keyword.split.size * 10) if keyword.split.size <= 5
+
+    # Brand terms
+    base += 200 if keyword.include?("validate") && keyword.include?("idea")
+    base += 150 if keyword.include?("startup")
+    base += 100 if keyword.include?("business")
+
+    # Question keywords = medium volume
+    base += 50 if keyword.start_with?("how to", "what is", "why")
+
+    # Long-tail = lower volume
+    base -= keyword.split.size * 20 if keyword.split.size > 4
+
+    # Tool/product keywords
+    base += 100 if keyword.include?("tool") || keyword.include?("software")
+
+    # Free = higher volume
+    base += 80 if keyword.include?("free")
+
+    [base, 10].max # Minimum 10
+  end
+
+  def estimate_difficulty(keyword)
+    # Estimate how hard it is to rank (0 = easy, 100 = impossible)
+    # Based on keyword characteristics
+
+    difficulty = 50 # Start at medium
+
+    # Shorter keywords = harder
+    difficulty += (5 - keyword.split.size) * 10 if keyword.split.size < 5
+
+    # Competitive terms
+    difficulty += 20 if keyword.include?("best")
+    difficulty += 15 if keyword.split.size <= 2 # Very broad
+    difficulty -= 15 if keyword.split.size >= 5 # Long-tail = easier
+
+    # Question keywords = easier (less competitive)
+    difficulty -= 10 if keyword.start_with?("how to", "what is", "why")
+
+    # Tool/product = competitive
+    difficulty += 10 if keyword.include?("tool") || keyword.include?("software")
+
+    # Specific modifiers = easier
+    difficulty -= 5 if keyword.include?("free")
+    difficulty -= 10 if keyword.include?("template") || keyword.include?("checklist")
+
+    [[difficulty, 0].max, 100].min # Clamp between 0-100
+  end
+
+  def estimate_cpc(keyword)
+    # Rough CPC estimate (in reality, use Google Keyword Planner)
+
+    # Business/startup keywords = higher CPC
+    base_cpc = 1.50
+
+    base_cpc += 1.0 if keyword.include?("startup") || keyword.include?("business")
+    base_cpc += 0.50 if keyword.include?("tool") || keyword.include?("software")
+    base_cpc -= 0.75 if keyword.include?("free")
+    base_cpc += 0.25 if keyword.include?("best")
+
+    base_cpc.round(2)
+  end
+
+  def determine_intent(keyword)
+    # What is the user trying to do?
+
+    return "navigational" if keyword.include?("login") || keyword.include?("sign up")
+    return "commercial" if keyword.include?("tool") || keyword.include?("software") || keyword.include?("best")
+    return "transactional" if keyword.include?("free") || keyword.include?("online") || keyword.include?("template")
+    return "informational" if keyword.start_with?("how to", "what is", "why", "when")
+    return "educational" if keyword.include?("guide") || keyword.include?("tutorial") || keyword.include?("framework")
+
+    "mixed"
+  end
+
+  def calculate_opportunity(data)
+    # Opportunity score: balance between volume and difficulty
+    # Higher volume + lower difficulty = higher opportunity
+
+    volume_score = normalize(data[:volume], max: 500) # Normalize to 0-100
+    difficulty_inverse = 100 - data[:difficulty] # Invert difficulty
+
+    # Weighted average (favor volume slightly)
+    opportunity = (volume_score * 0.6) + (difficulty_inverse * 0.4)
+
+    # Boost for good intent
+    opportunity += 5 if ["informational", "educational"].include?(data[:intent])
+    opportunity += 10 if data[:intent] == "commercial"
+
+    # Penalty for very low volume
+    opportunity -= 20 if data[:volume] < 50
+
+    [[opportunity, 0].max, 100].min.round
+  end
+
+  def normalize(value, max:)
+    # Normalize value to 0-100 scale
+    ((value.to_f / max) * 100).round
+  end
+
+  def output_results
+    # Sort by opportunity score (highest first)
+    sorted = @keywords.values.sort_by { |kw| -kw[:opportunity] }
+
+    # Top 30 keywords
+    top_keywords = sorted.first(30)
+
+    puts "\n" + "=" * 80
+    puts "TOP 30 KEYWORDS TO TARGET"
+    puts "=" * 80
+
+    # Table header
+    printf "%-45s %8s %10s %12s %10s %15s\n",
+           "Keyword", "Volume", "Difficulty", "Opportunity", "CPC", "Intent"
+    puts "-" * 110
+
+    top_keywords.each do |kw|
+      keyword_display = kw[:keyword].length > 45 ? "#{kw[:keyword][0..42]}..." : kw[:keyword]
+      printf "%-45s %8d %10d %12d %10s %15s\n",
+             keyword_display,
+             kw[:volume],
+             kw[:difficulty],
+             kw[:opportunity],
+             "$#{kw[:cpc]}",
+             kw[:intent]
+    end
+
+    puts "\n" + "=" * 80
+    puts "RECOMMENDATIONS"
+    puts "=" * 80
+
+    # Categorize by priority
+    high_priority = top_keywords.select { |kw| kw[:opportunity] >= 70 }
+    medium_priority = top_keywords.select { |kw| kw[:opportunity] >= 50 && kw[:opportunity] < 70 }
+
+    puts "\n🎯 HIGH PRIORITY (Write these first):"
+    high_priority.first(10).each_with_index do |kw, i|
+      puts "  #{i+1}. \"#{kw[:keyword]}\" (Score: #{kw[:opportunity]}, Vol: #{kw[:volume]}, Diff: #{kw[:difficulty]})"
+    end
+
+    puts "\n📝 MEDIUM PRIORITY (Write these next):"
+    medium_priority.first(10).each_with_index do |kw, i|
+      puts "  #{i+1}. \"#{kw[:keyword]}\" (Score: #{kw[:opportunity]}, Vol: #{kw[:volume]}, Diff: #{kw[:difficulty]})"
+    end
+
+    puts "\n" + "=" * 80
+    puts "CONTENT STRATEGY"
+    puts "=" * 80
+
+    # Group by intent
+    by_intent = top_keywords.group_by { |kw| kw[:intent] }
+
+    puts "\n📚 Educational content (#{by_intent['educational']&.size || 0} keywords):"
+    puts "   Write how-to guides, tutorials, frameworks"
+    by_intent['educational']&.first(3)&.each do |kw|
+      puts "   → \"#{kw[:keyword]}\""
+    end
+
+    puts "\n💼 Commercial content (#{by_intent['commercial']&.size || 0} keywords):"
+    puts "   Write comparison articles, \"best tool\" listicles, reviews"
+    by_intent['commercial']&.first(3)&.each do |kw|
+      puts "   → \"#{kw[:keyword]}\""
+    end
+
+    puts "\n💡 Informational content (#{by_intent['informational']&.size || 0} keywords):"
+    puts "   Write explainer articles, definitions, concept breakdowns"
+    by_intent['informational']&.first(3)&.each do |kw|
+      puts "   → \"#{kw[:keyword]}\""
+    end
+
+    puts "\n" + "=" * 80
+    puts "NEXT STEPS"
+    puts "=" * 80
+    puts "1. Pick 3-5 keywords from HIGH PRIORITY list"
+    puts "2. Write outlines for those articles"
+    puts "3. Identify where to embed mini-tools (persona gen, competitor search, etc.)"
+    puts "4. Generate and publish articles"
+    puts "5. Track rankings and traffic over 30-60 days"
+    puts "6. Iterate based on what works"
+    puts "=" * 80
+
+    # Export to CSV for easier analysis
+    export_to_csv(sorted)
+  end
+
+  def export_to_csv(keywords)
+    require 'csv'
+
+    filename = "keyword_research_#{Time.now.strftime('%Y%m%d_%H%M%S')}.csv"
+
+    CSV.open(filename, "w") do |csv|
+      csv << ["Keyword", "Volume", "Difficulty", "Opportunity", "CPC", "Intent", "Sources"]
+
+      keywords.each do |kw|
+        csv << [
+          kw[:keyword],
+          kw[:volume],
+          kw[:difficulty],
+          kw[:opportunity],
+          kw[:cpc],
+          kw[:intent],
+          kw[:sources].join(", ")
+        ]
+      end
+    end
+
+    puts "\n📊 Full results exported to: #{filename}"
+  end
+end
+
+# Run it
+KeywordResearcher.new.run

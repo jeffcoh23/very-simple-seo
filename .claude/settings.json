@@ -1,0 +1,6 @@
+{
+  "model": "claude-3.7-sonnet",
+  "workingDirectories": ["./", "app", "spec", "db", "config", "app/frontend"],
+  "allow": ["Read(*)","Write(*)","Grep(*)","Glob(*)"],
+  "memory": { "enabled": true }
+}

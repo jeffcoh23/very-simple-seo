@@ -1,0 +1,11 @@
+---
+name: security
+patterns:
+  include: ["**/*"]
+---
+# Security
+
+- Explicit authorization per action; least privilege in services/jobs.
+- Validate inputs; never trust client data; strong params only.
+- Rate limit public endpoints via rack-attack.
+- Secrets via ENV; never commit credentials or tokens.

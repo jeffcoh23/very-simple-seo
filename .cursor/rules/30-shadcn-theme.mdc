@@ -1,0 +1,10 @@
+---
+name: shadcn-theme
+patterns:
+  include: ["app/frontend/**/*.{js,jsx,ts,tsx,css}","tailwind.config.js","components.json"]
+---
+# shadcn/ui + Tailwind
+
+- Import from `@/components/ui/*` using repo aliases; use `lucide-react` icons.
+- Follow theme tokens in @theme; avoid inline styles.
+- Ensure hover/focus/active/disabled states are visible and accessible.

@@ -1,0 +1,14 @@
+# noise
+node_modules/
+tmp/
+log/
+storage/
+coverage/
+vendor/
+public/assets/
+.DS_Store
+.git/
+
+# secrets
+.env*
+config/credentials*

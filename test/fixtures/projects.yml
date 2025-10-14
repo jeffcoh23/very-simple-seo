@@ -1,0 +1,19 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  user: one
+  name: MyString
+  domain: MyString
+  niche: MyString
+  tone_of_voice: MyString
+  call_to_actions: 
+  sitemap_url: MyString
+
+two:
+  user: two
+  name: MyString
+  domain: MyString
+  niche: MyString
+  tone_of_voice: MyString
+  call_to_actions: 
+  sitemap_url: MyString

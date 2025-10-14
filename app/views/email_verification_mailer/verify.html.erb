@@ -1,0 +1,11 @@
+<h2>Welcome to <%= ENV.fetch('APP_NAME', 'VerySimpleSEO') %>!</h2>
+
+<p>Hi <%= @user.first_name || @user.email_address %>,</p>
+
+<p>Please verify your email address by clicking the link below:</p>
+
+<p><%= link_to "Verify Email Address", email_verification_url(token: @token) %></p>
+
+<p>This link will expire in 3 days.</p>
+
+<p>If you didn't create an account, you can safely ignore this email.</p>

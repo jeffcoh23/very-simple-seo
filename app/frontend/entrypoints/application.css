@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+/* VerySimpleSEO Design System - Organic Growth Palette */
+/* See docs/DESIGN_SYSTEM.md for full documentation */
+
+@theme {
+  /* Border Radius System */
+  --radius: 1rem;                    /* Default soft radius */
+  --radius-sharp: 0.25rem;           /* Data tables, badges */
+  --radius-soft: 1rem;               /* Buttons, cards */
+  --radius-dramatic: 2rem;           /* Hero elements */
+
+  /* Primary - Deep Forest Green (growth, trust, organic) */
+  --color-primary: hsl(152 45% 35%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-primary-soft: hsl(152 45% 95%);
+
+  /* Accent - Warm Amber (energy, action, opportunity) */
+  --color-accent: hsl(35 91% 58%);
+  --color-accent-foreground: hsl(0 0% 100%);
+  --color-accent-soft: hsl(35 91% 96%);
+
+  /* Background - Warm Cream (not harsh white) */
+  --color-background: hsl(35 20% 98%);
+  --color-foreground: hsl(152 25% 15%);
+
+  /* Card/Surfaces */
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(152 25% 15%);
+
+  /* Popover */
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(152 25% 15%);
+
+  /* Secondary */
+  --color-secondary: hsl(35 15% 92%);
+  --color-secondary-foreground: hsl(152 25% 15%);
+
+  /* Muted - Warm gray */
+  --color-muted: hsl(35 15% 92%);
+  --color-muted-foreground: hsl(35 10% 45%);
+
+  /* Success - Opportunity/Easy Keywords */
+  --color-success: hsl(142 76% 36%);
+  --color-success-soft: hsl(142 76% 95%);
+
+  /* Warning - Medium Difficulty */
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-soft: hsl(38 92% 95%);
+
+  /* Destructive - Hard/High Competition */
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-destructive-soft: hsl(0 84% 95%);
+
+  /* Info - Informational Intent */
+  --color-info: hsl(199 89% 48%);
+  --color-info-soft: hsl(199 89% 96%);
+
+  /* Border & Input */
+  --color-border: hsl(35 15% 88%);
+  --color-input: hsl(35 15% 88%);
+  --ring: hsl(152 45% 35%);
+
+  /* Typography */
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-inter: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
+
+@layer base {
+  * { @apply border-border; }
+  html, body { height: 100%; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-inter), ui-sans-serif, system-ui;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Display font for headings */
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+  }
+
+  /* Balanced defaults for the shell */
+  .container { @apply max-w-[1200px] mx-auto px-6 md:px-8; }
+  .container-wide { @apply max-w-[1400px] mx-auto px-8; }
+  .container-narrow { @apply max-w-[800px] mx-auto px-6; }
+}
+
+/* Section Spacing */
+.section-py { @apply py-16 md:py-24; }
+.section-py-lg { @apply py-24 md:py-32; }
+.section-py-sm { @apply py-8 md:py-12; }
+
+/* Custom Gradients - Warm & Subtle */
+.bg-hero {
+  background: radial-gradient(
+    1200px 400px at 50% -10%,
+    hsl(35 80% 94%),
+    transparent 70%
+  );
+}
+
+.bg-glow {
+  background: radial-gradient(
+    1200px 400px at 50% -10%,
+    hsl(35 80% 94%),
+    transparent 70%
+  );
+}
+
+.bg-warm {
+  background: linear-gradient(
+    135deg,
+    hsl(35 20% 98%) 0%,
+    hsl(152 15% 97%) 100%
+  );
+}
+
+.bg-accent-gradient {
+  background: linear-gradient(
+    135deg,
+    hsl(152 45% 35%) 0%,
+    hsl(152 45% 40%) 100%
+  );
+}
+
+/* Custom Utilities */
+.shadow-emphasis {
+  box-shadow:
+    0 1px 3px 0 rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1),
+    0 0 0 2px hsl(35 15% 88%);
+}
+
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -4px rgb(0 0 0 / 0.12);
+}
+
+.card-offset-radius {
+  border-top-left-radius: var(--radius-sharp);
+  border-top-right-radius: var(--radius-dramatic);
+  border-bottom-left-radius: var(--radius-dramatic);
+  border-bottom-right-radius: var(--radius-sharp);
+}
+
+.border-emphasis {
+  border-width: 2px;
+}
+
+/* Shadcn accordion animations (Tailwind v4 utilities) */
+@keyframes accordion-down { from { height: 0 } to { height: var(--radix-accordion-content-height) } }
+@keyframes accordion-up   { from { height: var(--radix-accordion-content-height) } to { height: 0 } }
+
+@utility animate-accordion-down { animation: accordion-down 0.2s ease-out; }
+@utility animate-accordion-up   { animation: accordion-up 0.2s ease-out; }

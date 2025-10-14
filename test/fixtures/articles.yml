@@ -1,0 +1,33 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  keyword: one
+  project: one
+  title: MyString
+  meta_description: MyString
+  content: MyText
+  outline: 
+  serp_data: 
+  status: 1
+  word_count: 1
+  target_word_count: 1
+  generation_cost: 9.99
+  started_at: 2025-10-11 17:50:22
+  completed_at: 2025-10-11 17:50:22
+  error_message: MyText
+
+two:
+  keyword: two
+  project: two
+  title: MyString
+  meta_description: MyString
+  content: MyText
+  outline: 
+  serp_data: 
+  status: 1
+  word_count: 1
+  target_word_count: 1
+  generation_cost: 9.99
+  started_at: 2025-10-11 17:50:22
+  completed_at: 2025-10-11 17:50:22
+  error_message: MyText
