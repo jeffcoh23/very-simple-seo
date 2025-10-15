@@ -1,12 +1,13 @@
 # app/services/ai/client_service.rb
 class Ai::ClientService
   # Model configuration for different services
+  # Using gpt-4o-mini for everything as it's cheaper than gemini-2.5-flash
   MODELS = {
-    keyword_analysis: { provider: "gemini", model: "gemini-2.5-flash" },
-    outline_generation: { provider: "gemini", model: "gemini-2.5-flash" },
+    keyword_analysis: { provider: "openai", model: "gpt-4o-mini" },
+    outline_generation: { provider: "openai", model: "gpt-4o-mini" },
     article_writing: { provider: "openai", model: "gpt-4o-mini" },
     article_improvement: { provider: "openai", model: "gpt-4o-mini" },
-    serp_analysis: { provider: "gemini", model: "gemini-2.5-flash" }
+    serp_analysis: { provider: "openai", model: "gpt-4o-mini" }
   }.freeze
 
   def initialize(service_name)
