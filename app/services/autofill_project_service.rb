@@ -190,71 +190,16 @@ class AutofillProjectService
   end
 
   def generate_seeds(domain_data, competitors)
-    # Build prompt using REAL domain content
-    client = Ai::ClientService.for_keyword_analysis
+    # Use SeedKeywordGenerator in raw domain mode (no project yet)
+    competitor_domains = competitors.map { |c| c[:domain] }
 
-    competitor_list = competitors.map { |c| c[:domain] }.join(", ")
-    competitor_list = "none detected" if competitor_list.empty?
-
-    prompt = <<~PROMPT
-      I need seed keywords for an SEO content strategy.
-
-      DOMAIN ANALYSIS:
-      Domain: #{@domain}
-      Title: #{domain_data[:title]}
-      Meta Description: #{domain_data[:meta_description]}
-      Main Topics (H1s): #{domain_data[:h1s]&.join(', ')}
-      Content Themes (H2s): #{domain_data[:h2s]&.first(5)&.join(', ')}
-      #{@niche.present? ? "Niche: #{@niche}" : ""}
-
-      COMPETITORS:
-      #{competitor_list}
-
-      Based on the ACTUAL content from this website, generate 15-20 seed keywords with a strategic MIX of competition levels:
-
-      HIGH-VOLUME (5-7 keywords) - The "money" keywords, even if competitive:
-      - Core product/service keywords (based on what the site actually offers)
-      - Industry-defining terms
-
-      MEDIUM-COMPETITION (5-7 keywords) - Realistic wins within 6-12 months:
-      - Problem-solving keywords (how to...)
-      - Comparison keywords
-      - Educational keywords
-
-      LOW-COMPETITION (5-7 keywords) - Quick wins, long-tail specific:
-      - Tool/template keywords
-      - Very specific use cases
-      - Niche-specific variations
-
-      Return ONLY the keywords, one per line, without numbering or extra explanation.
-      Focus on keywords with commercial or informational intent.
-      Mix broad generic terms with specific long-tail variations.
-    PROMPT
-
-    response = client.chat(
-      messages: [{ role: "user", content: prompt }],
-      system_prompt: "You are an expert SEO strategist who generates keyword ideas based on actual website content.",
-      max_tokens: 2000,
-      temperature: 0.7
+    generator = SeedKeywordGenerator.new(
+      @domain,
+      niche: @niche,
+      competitors: competitor_domains
     )
 
-    if response[:success]
-      parse_keywords(response[:content])
-    else
-      # Fallback to domain data keywords
-      fallback_seeds(domain_data)
-    end
-  end
-
-  def parse_keywords(content)
-    keywords = content.split("\n")
-                     .map { |line| line.strip }
-                     .map { |line| line.gsub(/^\d+[\.\)]\s*/, '') }
-                     .map { |line| line.gsub(/^[-*•]\s*/, '') }
-                     .select { |line| line.length > 0 && line.length < 100 }
-                     .map(&:downcase)
-
-    keywords.uniq
+    generator.generate
   end
 
   def fallback_seeds(domain_data)

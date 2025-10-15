@@ -45,7 +45,7 @@ class KeywordMetricsService
             }
           else
             # Fall back to heuristics for this keyword
-            new(kw_lower).calculate
+            new(kw_lower).calculate.merge(keyword: kw_lower)
           end
         end
       end
@@ -58,6 +58,9 @@ class KeywordMetricsService
   def self.calculate_opportunity(metrics)
     # Opportunity score: balance between volume and difficulty
     # Higher volume + lower difficulty = higher opportunity
+
+    # Return nil if we don't have the required metrics
+    return nil unless metrics[:volume] && metrics[:difficulty]
 
     volume_score = normalize(metrics[:volume], max: 500) # Normalize to 0-100
     difficulty_inverse = 100 - metrics[:difficulty] # Invert difficulty

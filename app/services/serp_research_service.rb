@@ -70,33 +70,41 @@ class SerpResearchService
     end
 
     query = URI.encode_www_form_component(@keyword)
-    url = "https://www.googleapis.com/customsearch/v1?key=#{api_key}&cx=#{cx}&q=#{query}&num=10"
-
-    uri = URI(url)
-    response = Net::HTTP.get_response(uri)
-
-    unless response.code == '200'
-      Rails.logger.error "Google API error: #{response.code}"
-      return []
-    end
-
-    data = JSON.parse(response.body)
-
-    if data['error']
-      Rails.logger.error "Google API error: #{data['error']['message']}"
-      return []
-    end
-
     results = []
-    (data['items'] || []).each do |item|
-      results << {
-        title: item['title'],
-        url: item['link'],
-        snippet: item['snippet'] || ""
-      }
-      break if results.size >= 10
+
+    # Fetch 2 pages (20 results total) for better competitor coverage
+    # Google Custom Search API max is 10 per request
+    [1, 11].each do |start_index|
+      url = "https://www.googleapis.com/customsearch/v1?key=#{api_key}&cx=#{cx}&q=#{query}&num=10&start=#{start_index}"
+
+      uri = URI(url)
+      response = Net::HTTP.get_response(uri)
+
+      unless response.code == '200'
+        Rails.logger.error "Google API error: #{response.code}"
+        next
+      end
+
+      data = JSON.parse(response.body)
+
+      if data['error']
+        Rails.logger.error "Google API error: #{data['error']['message']}"
+        next
+      end
+
+      (data['items'] || []).each do |item|
+        results << {
+          title: item['title'],
+          url: item['link'],
+          snippet: item['snippet'] || ""
+        }
+      end
+
+      # Small delay between API calls
+      sleep 0.5 if start_index == 1
     end
 
+    Rails.logger.info "Fetched #{results.size} search results from Google"
     results
   rescue => e
     Rails.logger.error "Google API failed: #{e.message}"

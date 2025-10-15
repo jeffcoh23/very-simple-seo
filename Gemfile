@@ -17,6 +17,7 @@ gem 'omniauth-google-oauth2'
 
 gem 'ruby_llm'
 gem 'kramdown'  # Markdown to HTML conversion
+gem 'google-ads-googleads', '~> 32.0'  # Official Google Ads API client
 
 # Email
 gem 'resend'

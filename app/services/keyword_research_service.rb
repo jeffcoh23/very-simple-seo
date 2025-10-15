@@ -16,8 +16,8 @@ class KeywordResearchService
     # 2. Expand via Google autocomplete, PAA, related searches
     expand_keywords
 
-    # 3. Mine Reddit topics
-    mine_reddit
+    # 3. Mine Reddit topics (DISABLED - too noisy, creates ultra long-tail keywords with no volume)
+    # mine_reddit
 
     # 4. Scrape competitor sitemaps and pages
     analyze_competitors
@@ -120,7 +120,7 @@ class KeywordResearchService
     Rails.logger.info "Step 5: Calculating metrics for #{@keywords.size} keywords..."
 
     # Try to use Google Ads API for batch metrics (more efficient)
-    use_google_ads = ENV['GOOGLE_ADS_DEVELOPER_TOKEN'].present?
+    use_google_ads = ENV["GOOGLE_ADS_DEVELOPER_TOKEN"].present?
 
     if use_google_ads && @keywords.size > 0
       Rails.logger.info "Attempting to fetch real metrics from Google Ads API..."
@@ -179,8 +179,8 @@ class KeywordResearchService
   def save_keywords
     Rails.logger.info "Step 6: Saving top 30 keywords to database..."
 
-    # Sort by opportunity score (highest first)
-    sorted = @keywords.values.sort_by { |kw| -kw[:opportunity] }
+    # Sort by opportunity score (highest first), treating nil as 0
+    sorted = @keywords.values.sort_by { |kw| -(kw[:opportunity] || 0) }
 
     # Save top 30
     top_30 = sorted.first(30)

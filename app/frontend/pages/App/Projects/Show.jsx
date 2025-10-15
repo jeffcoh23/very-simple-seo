@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Link, usePage, router } from "@inertiajs/react"
 import { createConsumer } from "@rails/actioncable"
 import AppLayout from "@/layout/AppLayout"
@@ -17,6 +17,14 @@ export default function ProjectsShow() {
   const [progressMessage, setProgressMessage] = useState("")
   const [progressLog, setProgressLog] = useState(keywordResearch?.progress_log || [])
   const [showResearchLog, setShowResearchLog] = useState(false)
+  const progressLogRef = useRef(null)
+
+  // Auto-scroll progress log when new messages arrive
+  useEffect(() => {
+    if (progressLogRef.current) {
+      progressLogRef.current.scrollTop = progressLogRef.current.scrollHeight
+    }
+  }, [progressLog])
 
   // Real-time updates via ActionCable
   useEffect(() => {
@@ -145,7 +153,10 @@ export default function ProjectsShow() {
 
                   {/* Progress Log */}
                   {progressLog.length > 0 && (
-                    <div className="mt-3 space-y-1 max-h-48 overflow-y-auto bg-white/50 rounded p-2 border-2 border-info/30">
+                    <div
+                      ref={progressLogRef}
+                      className="mt-3 space-y-1 max-h-48 overflow-y-auto bg-white/50 rounded p-2 border-2 border-info/30 scroll-smooth"
+                    >
                       {progressLog.map((entry, index) => {
                         const indent = entry.indent || 0
                         const paddingLeft = indent * 16 // 16px per indent level
@@ -163,7 +174,7 @@ export default function ProjectsShow() {
                   )}
 
                   <p className="text-xs text-info mt-2">
-                    Found {keywordsFound} keywords so far. This usually takes about 40 seconds.
+                    Found {keywordsFound} keywords so far. This usually takes about 1-3 minutes.
                   </p>
                 </div>
               </div>
