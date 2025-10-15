@@ -35,7 +35,7 @@ class SeedKeywordGenerator
       messages: [{ role: "user", content: prompt }],
       system_prompt: "You are an expert SEO strategist who generates keyword ideas based on actual website content.",
       max_tokens: 2000,
-      temperature: 0.3
+      temperature: 0.7
     )
 
     if response[:success]
@@ -102,9 +102,9 @@ class SeedKeywordGenerator
     end
 
     <<~PROMPT
-      I need SEED keywords for an SEO content strategy. These are FOUNDATIONAL terms that will be expanded later.
+      I need seed keywords for an SEO content strategy.
 
-      YOUR DOMAIN ANALYSIS (based on actual website content):
+      DOMAIN ANALYSIS (based on actual website content):
       Domain: #{@domain}
       Page Title: #{title}
       Meta Description: #{meta_desc}
@@ -113,32 +113,31 @@ class SeedKeywordGenerator
       #{@niche.present? ? "Niche: #{@niche}" : ""}
       #{competitor_insights}
 
-      YOUR TASK:
-      Extract 15-20 SHORT, BROAD seed keywords (1-5 words) by identifying:
-      1. The main PROBLEM your domain solves (e.g., "validate business", "idea validation")
-      2. The core TOPICS in your headings (extract key noun phrases)
-      3. What ACTIONS users want to take (e.g., "generate ideas", "test startup")
-      4. Related CONCEPTS from the industry (look at competitor topics for inspiration)
-      5. KEYWORD GAPS - topics competitors cover that you should target too
+      Based on the ACTUAL content from this website (not just the domain name), generate 20-30 seed keywords with STRATEGIC DIVERSITY:
 
-      IMPORTANT RULES:
-      - Keep it SHORT: 1-5 words per keyword (prefer 2-3 words)
-      - Extract from ACTUAL content, don't invent generic terms
-      - Focus on searchable NOUNS and VERBS ("validate business" not "business validation tool")
-      - Include variations (e.g., "business idea", "startup idea", "entrepreneurial idea")
-      - Think: what would someone type in Google BEFORE they know this product exists?
+      HIGH-VOLUME BROAD (5-8 keywords, 1-2 words) - The "money" keywords, even if competitive:
+      - Core industry terms (e.g., "ai tools", "startup validation")
+      - Product category keywords (e.g., "idea validation", "business tool")
+      - Broad commercial terms
 
-      GOOD EXAMPLES:
-      - "business idea", "startup idea", "validate business", "idea validation"
-      - "customer persona", "market research", "business plan"
-      - "startup feedback", "test idea", "validate startup"
+      MEDIUM-COMPETITION (6-9 keywords, 2-4 words) - Realistic wins within 6-12 months:
+      - Core product/service phrases (e.g., "business idea validation", "startup feedback tool")
+      - Problem-solving keywords (e.g., "validate business ideas", "test startup idea")
+      - Comparison keywords (e.g., "best validation tools")
 
-      BAD EXAMPLES:
-      - "business idea validation tool" (too specific, mentions "tool")
-      - "ai-driven startup validation" (too specific, mentions technology)
-      - "how to validate a business idea" (full question, not a seed)
+      LOW-COMPETITION LONG-TAIL (6-9 keywords, 4-6 words) - Quick wins, very specific:
+      - Full problem statements (e.g., "how to validate a business idea")
+      - Tool/template keywords (e.g., "business idea validation template")
+      - Very specific use cases (e.g., "validate startup ideas with ai")
 
-      Return ONLY the keywords, one per line, without numbering or explanation.
+      CRITICAL: You MUST include a variety of word counts (1-6 words). Examples:
+      - 1-2 words: "ai tools", "idea validation", "startup tool"
+      - 2-3 words: "business validation", "validate ideas", "startup feedback"
+      - 3-4 words: "business idea validation", "ai customer personas"
+      - 4-6 words: "how to validate a business idea", "best tools for startup validation"
+
+      Return ONLY the keywords, one per line, without numbering or extra explanation.
+      Focus on keywords with commercial or informational intent.
     PROMPT
   end
 
@@ -151,7 +150,6 @@ class SeedKeywordGenerator
                      .map { |line| line.gsub(/^[-*•]\s*/, '') } # Remove bullets
                      .select { |line| line.length > 0 && line.length < 100 }
                      .map(&:downcase)
-                     .select { |line| line.split.size >= 1 && line.split.size <= 5 } # Enforce 1-5 words for seeds
 
     keywords.uniq
   end

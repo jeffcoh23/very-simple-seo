@@ -15,6 +15,11 @@ class ArticleWriterService
     intro = write_introduction
     return { data: nil, cost: 0.15 } if intro.nil?
 
+    # Track all written content for context
+    @written_sections = [intro]
+    @used_examples = extract_used_examples(intro)
+    @used_statistics = extract_used_statistics(intro)
+
     # Write each section
     sections = []
     @outline['sections'].each_with_index do |section_outline, i|
@@ -23,12 +28,17 @@ class ArticleWriterService
 
       Rails.logger.info "Writing section #{i + 1}/#{@outline['sections'].size}: #{section_outline['heading']}"
 
-      section_content = write_section(section_outline, i)
-      sections << section_content if section_content
+      section_content = write_section(section_outline, i, sections)
+      if section_content
+        sections << section_content
+        @written_sections << section_content
+        @used_examples.concat(extract_used_examples(section_content))
+        @used_statistics.concat(extract_used_statistics(section_content))
+      end
     end
 
     # Write conclusion
-    conclusion = write_conclusion
+    conclusion = write_conclusion(sections)
     return { data: nil, cost: 0.15 } if conclusion.nil?
 
     article_markdown = build_article_markdown(intro, sections, conclusion)
@@ -90,7 +100,7 @@ class ArticleWriterService
     nil
   end
 
-  def write_section(section_outline, section_index)
+  def write_section(section_outline, section_index, previous_sections)
     examples = @serp_data['detailed_examples'] || []
     statistics = @serp_data['statistics'] || []
 
@@ -99,8 +109,17 @@ class ArticleWriterService
     key_points = section_outline['key_points'] || []
     subsections = section_outline['subsections'] || []
 
+    # Build previous context (last 2 sections for brevity)
+    previous_context = build_previous_context(previous_sections.last(2))
+
+    # Filter out already-used examples and statistics
+    available_examples = filter_unused_examples(examples)
+    available_statistics = filter_unused_statistics(statistics)
+
     prompt = <<~PROMPT
       Write a section for an article about "#{@keyword}".
+
+      #{previous_context}
 
       SECTION HEADING: #{heading}
 
@@ -110,10 +129,16 @@ class ArticleWriterService
       #{subsections.any? ? "SUBSECTIONS TO INCLUDE:\n#{subsections.map { |s| "- #{s['heading']}: #{s['key_points']&.join(', ')}" }.join("\n")}" : ""}
 
       AVAILABLE EXAMPLES (use 2-3 if relevant):
-      #{examples.take(5).map { |ex| "- #{ex['company']}: #{ex['what_they_did']} → #{ex['outcome']}" }.join("\n")}
+      #{available_examples.take(5).map { |ex| "- #{ex['company']}: #{ex['what_they_did']} → #{ex['outcome']}" }.join("\n")}
 
       AVAILABLE STATISTICS (use 2-3 if relevant):
-      #{statistics.take(5).map { |stat| "- #{stat['stat']} (#{stat['source']})" }.join("\n")}
+      #{available_statistics.take(5).map { |stat| "- #{stat['stat']} (#{stat['source']})" }.join("\n")}
+
+      EXAMPLES ALREADY USED (DO NOT repeat these):
+      #{@used_examples.uniq.join(", ")}
+
+      STATISTICS ALREADY USED (DO NOT repeat these):
+      #{@used_statistics.uniq.take(5).join("; ")}
 
       #{voice_instructions}
 
@@ -123,12 +148,14 @@ class ArticleWriterService
       - Write in markdown format
       - Include the H2 heading: ## #{heading}
       - Use H3 headings (###) for subsections
-      - Use real examples and statistics from the data provided
+      - DO NOT repeat any examples or statistics already used in previous sections
+      - Reference previous sections naturally if relevant (e.g., "As mentioned earlier...")
+      - Use DIFFERENT examples from the available list above
       - Include bullet points or numbered lists where appropriate
       - Keep paragraphs short (2-4 sentences)
       - Use natural, conversational tone
       - Avoid AI clichés like "it's important to note" or "remember"
-      - Make it actionable and specific
+      - Make it actionable and specific with HOW details, not just WHAT
     PROMPT
 
     client = Ai::ClientService.for_article_writing
@@ -146,14 +173,22 @@ class ArticleWriterService
     nil
   end
 
-  def write_conclusion
+  def write_conclusion(sections)
     conclusion_section = @outline['sections'].find { |s| s['heading']&.downcase&.include?('conclusion') }
     word_count = conclusion_section&.dig('word_count') || 200
+
+    # Get section headings for context
+    section_headings = @outline['sections']
+      .reject { |s| s['heading']&.downcase&.include?('introduction') || s['heading']&.downcase&.include?('conclusion') }
+      .map { |s| s['heading'] }
 
     prompt = <<~PROMPT
       Write a conclusion for an article about "#{@keyword}".
 
       ARTICLE TITLE: #{@outline['title']}
+
+      MAIN SECTIONS COVERED:
+      #{section_headings.map { |h| "- #{h}" }.join("\n")}
 
       KEY POINTS TO COVER:
       #{conclusion_section&.dig('key_points')&.join("\n") || "- Summarize main takeaways\n- Call to action\n- Final thought"}
@@ -163,12 +198,24 @@ class ArticleWriterService
       TARGET: #{word_count} words
 
       REQUIREMENTS:
-      - Summarize the main insights without being repetitive
-      - Give readers a clear next step
-      - End with a thought-provoking question or statement
+      - Start with a strong summary of the 3 MOST IMPORTANT actionable takeaways (be specific, not vague)
+      - Provide ONE concrete next step readers can take immediately (not generic "take action")
+      - NO vague motivational questions like "Are you ready to take the leap?"
+      - NO generic calls to action like "start today"
+      - Instead, give SPECIFIC actions: "Book 5 customer interviews by Friday using the script in Section 2"
       - Write in markdown format
       - DO NOT include the heading (I'll add it)
-      - Avoid AI clichés like "in conclusion" or "to sum up"
+      - Avoid AI clichés like "in conclusion", "to sum up", "at the end of the day"
+
+      GOOD CONCLUSION EXAMPLE:
+      "Validating your business idea comes down to three actions:
+      1. Run 10+ customer interviews using the question framework in Section 2
+      2. Build a landing page and aim for 30+ signups in 2 weeks
+      3. Create a basic prototype and get 5 people to pay $1
+
+      Start with customer interviews this week. Use the script above and book your first 5 conversations by Friday. This single step will tell you more than months of planning."
+
+      Write in this direct, specific, actionable style.
     PROMPT
 
     client = Ai::ClientService.for_article_writing
@@ -216,5 +263,71 @@ class ArticleWriterService
 
       Write in this exact tone and style.
     VOICE
+  end
+
+  # Build context from previous sections (for flow and avoiding repetition)
+  def build_previous_context(previous_sections)
+    return "" if previous_sections.empty?
+
+    # Truncate each section to first 200 chars (just headings + opening)
+    previews = previous_sections.map do |section|
+      truncated = section[0..200].gsub("\n", " ")
+      "#{truncated}..."
+    end
+
+    <<~CONTEXT
+      PREVIOUS SECTIONS (for context - maintain flow, don't repeat):
+      #{previews.join("\n\n")}
+    CONTEXT
+  end
+
+  # Extract company names used in text
+  def extract_used_examples(text)
+    return [] if text.nil? || text.empty?
+
+    examples = @serp_data['detailed_examples'] || []
+    used = []
+
+    examples.each do |ex|
+      company = ex['company']
+      # Check if company name appears in text (case-insensitive)
+      used << company if text =~ /#{Regexp.escape(company)}/i
+    end
+
+    used
+  end
+
+  # Extract statistics used in text
+  def extract_used_statistics(text)
+    return [] if text.nil? || text.empty?
+
+    statistics = @serp_data['statistics'] || []
+    used = []
+
+    statistics.each do |stat|
+      stat_text = stat['stat']
+      # Check if stat appears in text
+      used << stat_text if text.include?(stat_text)
+    end
+
+    used
+  end
+
+  # Filter out examples that have already been used
+  def filter_unused_examples(all_examples)
+    return [] if all_examples.nil?
+
+    all_examples.reject do |ex|
+      @used_examples.include?(ex['company'])
+    end
+  end
+
+  # Filter out statistics that have already been used
+  def filter_unused_statistics(all_statistics)
+    return [] if all_statistics.nil?
+
+    all_statistics.reject do |stat|
+      @used_statistics.include?(stat['stat'])
+    end
   end
 end

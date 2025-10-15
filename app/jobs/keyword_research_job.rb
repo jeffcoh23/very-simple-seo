@@ -42,10 +42,10 @@ class KeywordResearchJob < ApplicationJob
     total_found = service.instance_variable_get(:@keywords).size
     broadcast_progress("✅ Found #{total_found} total keywords after expansion")
 
-    # Step 3: Mine Reddit
-    broadcast_progress("📱 Mining Reddit for topic ideas...")
-    service.send(:mine_reddit)
-    broadcast_progress("✅ Mined Reddit discussions")
+    # Step 3: Mine Reddit (DISABLED - keeping for future improvement)
+    # broadcast_progress("📱 Mining Reddit for topic ideas...")
+    # service.send(:mine_reddit)
+    # broadcast_progress("✅ Mined Reddit discussions")
 
     # Step 4: Analyze competitors
     if @keyword_research.project.competitors.any?

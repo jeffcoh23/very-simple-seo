@@ -1,6 +1,10 @@
 # app/services/keyword_research_service.rb
 # Main orchestration service for keyword research
 class KeywordResearchService
+  # Thresholds for filtering
+  OPPORTUNITY_THRESHOLD_FOR_MEDIUM = 70 # Minimum opportunity score for medium confidence keywords
+  SIMILARITY_THRESHOLD = 0.30 # Minimum semantic similarity (0-1 scale, tuned to 0.30 for balance)
+
   def initialize(keyword_research)
     @keyword_research = keyword_research
     @project = keyword_research.project
@@ -85,16 +89,26 @@ class KeywordResearchService
       sleep 2 # Be nice to Google
     end
 
+    all_expanded = all_expanded.uniq
     Rails.logger.info "Expanded to #{all_expanded.size} keywords before filtering"
 
-    # Filter for relevance using AI
+    # Layer 1: Semantic similarity pre-filter (fast, catches obvious mismatches)
+    semantically_filtered = filter_by_semantic_similarity(all_expanded)
+    Rails.logger.info "After semantic filtering: #{semantically_filtered.size} keywords"
+
+    # Layer 2: AI relevance filter with confidence levels
     filter = KeywordRelevanceFilter.new(@project)
-    relevant_keywords = filter.filter(all_expanded.uniq)
+    keywords_with_confidence = filter.filter_with_confidence(semantically_filtered)
 
-    # Add filtered keywords
-    relevant_keywords.each { |kw| add_keyword(kw, source: "expansion") }
+    # Add keywords with their confidence metadata
+    keywords_with_confidence.each do |keyword, confidence|
+      next if confidence == "low" # Skip low confidence entirely
 
-    Rails.logger.info "After expansion and filtering: #{@keywords.size} unique keywords"
+      # Add keyword with confidence metadata (we'll use this later for Option 2 filtering)
+      add_keyword(keyword, source: "expansion", confidence: confidence)
+    end
+
+    Rails.logger.info "After AI filtering: #{@keywords.size} keywords (will apply Option 2 filter after metrics)"
   end
 
   def mine_reddit
@@ -168,7 +182,7 @@ class KeywordResearchService
     Rails.logger.info "Metrics calculated for all keywords"
   end
 
-  def add_keyword(keyword, source: "unknown")
+  def add_keyword(keyword, source: "unknown", confidence: nil)
     keyword = keyword.downcase.strip
     return if keyword.empty?
     return if keyword.length > 100 # Too long (likely sentence, not keyword)
@@ -181,22 +195,63 @@ class KeywordResearchService
       difficulty: nil,
       cpc: nil,
       opportunity: nil,
-      intent: nil
+      intent: nil,
+      confidence: nil # Will store "high", "medium", or nil for seed/competitor keywords
     }
 
     @keywords[keyword][:sources] << source unless @keywords[keyword][:sources].include?(source)
+    @keywords[keyword][:confidence] = confidence if confidence
   end
 
   def save_keywords
-    Rails.logger.info "Step 6: Saving top 30 keywords to database..."
+    Rails.logger.info "Step 6: Saving top keywords to database..."
+
+    # Filter out keywords with very low or no search volume
+    viable_keywords = @keywords.values.select do |kw|
+      kw[:volume] && kw[:volume] >= 10
+    end
+
+    Rails.logger.info "Filtered to #{viable_keywords.size} keywords with volume >= 10"
+
+    # Option 2 Filter: Apply confidence-based opportunity threshold
+    # High confidence = keep (always)
+    # Medium confidence + Opp > 70 = keep
+    # Medium confidence + Opp ≤ 70 = remove
+    # Low confidence = already removed earlier
+    # No confidence (seed/competitor) = keep (trust the source)
+
+    before_count = viable_keywords.size
+    filtered_keywords = viable_keywords.select do |kw|
+      confidence = kw[:confidence]
+
+      if confidence == "high" || confidence.nil?
+        # High confidence or no confidence (seed/competitor) = always keep
+        true
+      elsif confidence == "medium"
+        # Medium confidence = only keep if high opportunity
+        opportunity = kw[:opportunity] || 0
+        keep = opportunity > OPPORTUNITY_THRESHOLD_FOR_MEDIUM
+
+        unless keep
+          Rails.logger.info "  ⨯ Filtered medium-confidence '#{kw[:keyword]}' (opp: #{opportunity})"
+        end
+
+        keep
+      else
+        # Low confidence should have been filtered already, but just in case
+        false
+      end
+    end
+
+    Rails.logger.info "Option 2 filter removed #{before_count - filtered_keywords.size} medium-confidence low-opportunity keywords"
 
     # Sort by opportunity score (highest first), treating nil as 0
-    sorted = @keywords.values.sort_by { |kw| -(kw[:opportunity] || 0) }
+    sorted = filtered_keywords.sort_by { |kw| -(kw[:opportunity] || 0) }
 
-    # Save top 30
-    top_30 = sorted.first(30)
+    # Save top 100 (or all if less than 100)
+    top_keywords = sorted.first(100)
 
-    top_30.each do |kw_data|
+    top_keywords.each do |kw_data|
       @keyword_research.keywords.create!(
         keyword: kw_data[:keyword],
         volume: kw_data[:volume],
@@ -208,6 +263,63 @@ class KeywordResearchService
       )
     end
 
-    Rails.logger.info "Saved #{top_30.size} keywords"
+    Rails.logger.info "Saved #{top_keywords.size} keywords (filtered from #{@keywords.size} total, #{viable_keywords.size} with volume >= 10)"
+  end
+
+  # Build semantic "fingerprint" of domain for similarity matching
+  def build_domain_context
+    domain_data = @project.domain_analysis
+
+    # If no domain analysis, scrape it now (critical for semantic filtering)
+    if domain_data.nil? || domain_data.empty?
+      Rails.logger.info "No domain analysis found, scraping domain for context..."
+      service = DomainAnalysisService.new(@project.domain)
+      domain_data = service.analyze
+
+      # Cache it for future use
+      @project.update(domain_analysis: domain_data) if domain_data && !domain_data[:error]
+    end
+
+    # If scraping failed or returned minimal data, fall back to basic context
+    if domain_data.nil? || domain_data.empty? || domain_data[:error]
+      Rails.logger.warn "Could not scrape domain, using basic context (project name + niche)"
+      return [@project.name, @project.niche, @project.description].compact.join(". ")
+    end
+
+    # Combine key content elements into contextual summary
+    [
+      domain_data[:title],
+      domain_data[:meta_description],
+      domain_data[:h1s]&.first(3)&.join(". "),
+      domain_data[:h2s]&.first(5)&.join(". ")
+    ].compact.join(". ")
+  end
+
+  # Filter keywords by semantic similarity to domain context
+  def filter_by_semantic_similarity(keywords)
+    return keywords if keywords.empty?
+
+    domain_context = build_domain_context
+    similarity_service = SemanticSimilarityService.new
+
+    # Batch calculate similarity for all keywords
+    similarity_results = similarity_service.batch_similarity(domain_context, keywords)
+
+    # Filter and log rejected keywords
+    filtered_keywords = []
+    rejected_count = 0
+
+    similarity_results.each do |result|
+      if result[:similarity] >= SIMILARITY_THRESHOLD
+        filtered_keywords << result[:keyword]
+      else
+        rejected_count += 1
+        Rails.logger.info "  ⨯ Rejected '#{result[:keyword]}' (similarity: #{result[:similarity].round(3)})"
+      end
+    end
+
+    Rails.logger.info "Semantic filter removed #{rejected_count} keywords (threshold: #{SIMILARITY_THRESHOLD})"
+
+    filtered_keywords
   end
 end

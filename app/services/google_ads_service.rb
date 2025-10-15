@@ -1,10 +1,8 @@
-#!/usr/bin/env ruby
 # frozen_string_literal: true
 
 # Google Ads API Service for Keyword Research
 # Fetches real search volume, CPC, and competition data using official gem
-
-require 'google/ads/google_ads'
+# Note: Google Ads gem is loaded in config/initializers/google_ads.rb
 
 class GoogleAdsService
   # Google Ads API requires OAuth setup
