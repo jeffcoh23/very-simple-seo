@@ -65,25 +65,36 @@ class KeywordResearchService
   def expand_keywords
     Rails.logger.info "Step 2: Expanding keywords..."
 
+    all_expanded = []
+
     @keyword_research.seed_keywords.each do |seed|
       Rails.logger.info "  Expanding: #{seed}"
 
       # Google autocomplete suggestions
       suggestions = GoogleSuggestionsService.new(seed).fetch
-      suggestions.each { |kw| add_keyword(kw, source: "autocomplete") }
+      all_expanded.concat(suggestions)
 
       # SERP scraping (PAA + Related Searches)
       serp_scraper = SerpScraperService.new(seed)
       paa = serp_scraper.scrape_people_also_ask
-      paa.each { |kw| add_keyword(kw, source: "people_also_ask") }
+      all_expanded.concat(paa)
 
       related = serp_scraper.scrape_related_searches
-      related.each { |kw| add_keyword(kw, source: "related_searches") }
+      all_expanded.concat(related)
 
       sleep 2 # Be nice to Google
     end
 
-    Rails.logger.info "After expansion: #{@keywords.size} unique keywords"
+    Rails.logger.info "Expanded to #{all_expanded.size} keywords before filtering"
+
+    # Filter for relevance using AI
+    filter = KeywordRelevanceFilter.new(@project)
+    relevant_keywords = filter.filter(all_expanded.uniq)
+
+    # Add filtered keywords
+    relevant_keywords.each { |kw| add_keyword(kw, source: "expansion") }
+
+    Rails.logger.info "After expansion and filtering: #{@keywords.size} unique keywords"
   end
 
   def mine_reddit

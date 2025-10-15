@@ -182,7 +182,8 @@ class KeywordMetricsService
   end
 
   def self.normalize(value, max:)
-    # Normalize value to 0-100 scale
-    ((value.to_f / max) * 100).round
+    # Normalize value to 0-100 scale, clamping at max
+    normalized = ((value.to_f / max) * 100).round
+    [normalized, 100].min # Cap at 100
   end
 end
