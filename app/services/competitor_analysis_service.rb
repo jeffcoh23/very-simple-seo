@@ -32,8 +32,11 @@ class CompetitorAnalysisService
 
     sitemap_urls = [
       "https://#{domain}/sitemap.xml",
+      "https://#{domain}/sitemap.xml.gz",
       "https://#{domain}/sitemap_index.xml",
-      "https://www.#{domain}/sitemap.xml"
+      "https://#{domain}/sitemap_index.xml.gz",
+      "https://www.#{domain}/sitemap.xml",
+      "https://www.#{domain}/sitemap.xml.gz"
     ]
 
     keywords = []
@@ -50,7 +53,14 @@ class CompetitorAnalysisService
 
         next unless response.code == '200'
 
-        xml = Nokogiri::XML(response.body)
+        # Decompress if gzipped
+        content = if sitemap_url.end_with?('.gz')
+                    decompress_gzip(response.body)
+                  else
+                    response.body
+                  end
+
+        xml = Nokogiri::XML(content)
 
         # Extract URLs from sitemap
         urls = xml.xpath('//xmlns:loc').map(&:text)
@@ -128,5 +138,15 @@ class CompetitorAnalysisService
 
     Rails.logger.info "Found #{keywords.size} keywords from pages" if keywords.any?
     keywords.compact.uniq
+  end
+
+  def decompress_gzip(gzipped_content)
+    require 'zlib'
+    require 'stringio'
+
+    gz = Zlib::GzipReader.new(StringIO.new(gzipped_content))
+    gz.read
+  ensure
+    gz&.close
   end
 end

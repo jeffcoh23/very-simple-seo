@@ -61,12 +61,16 @@ class DomainAnalysisService
   end
 
   def detect_sitemap
-    # Try common sitemap locations
+    # Try common sitemap locations (including gzipped versions)
     sitemap_paths = [
       '/sitemap.xml',
+      '/sitemap.xml.gz',
       '/sitemap_index.xml',
+      '/sitemap_index.xml.gz',
       '/sitemap-index.xml',
-      '/sitemaps/sitemap.xml'
+      '/sitemap-index.xml.gz',
+      '/sitemaps/sitemap.xml',
+      '/sitemaps/sitemap.xml.gz'
     ]
 
     sitemap_paths.each do |path|
@@ -78,11 +82,29 @@ class DomainAnalysisService
 
       # Found a sitemap!
       @results[:sitemap_url] = uri.to_s
-      parse_sitemap(response.body)
+
+      # Decompress if gzipped
+      content = if path.end_with?('.gz')
+                  decompress_gzip(response.body)
+                else
+                  response.body
+                end
+
+      parse_sitemap(content)
       break
     end
 
     Rails.logger.info "Sitemap detected: #{@results[:sitemap_url]}" if @results[:sitemap_url]
+  end
+
+  def decompress_gzip(gzipped_content)
+    require 'zlib'
+    require 'stringio'
+
+    gz = Zlib::GzipReader.new(StringIO.new(gzipped_content))
+    gz.read
+  ensure
+    gz&.close
   end
 
   def parse_sitemap(xml_content)
