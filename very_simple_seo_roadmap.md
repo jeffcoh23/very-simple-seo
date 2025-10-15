@@ -1113,6 +1113,182 @@ kamal app logs -f
 
 ## Phase 10: Beta Launch (Days 24-28)
 
+### 10.0 Pre-Launch SEO & Media Checklist
+
+Before launching to the public, ensure all SEO and media assets are in place for optimal discoverability and social sharing.
+
+#### SEO Checklist
+
+**Meta Tags:**
+- [ ] **Page Titles** - Unique, descriptive titles for all public pages (50-60 characters)
+  - Homepage: "VerySimpleSEO - Keyword Research & AI Article Generation"
+  - Pricing: "Pricing - VerySimpleSEO"
+  - Features: "Features - VerySimpleSEO"
+- [ ] **Meta Descriptions** - Compelling descriptions for all pages (150-160 characters)
+- [ ] **Canonical URLs** - Set canonical tag on all pages to prevent duplicate content
+- [ ] **Language Tag** - Add `<html lang="en">` to layout
+
+**Open Graph (OG) Tags for Social Sharing:**
+- [ ] `og:title` - Same as page title or slightly optimized for social
+- [ ] `og:description` - Brief description (2-3 sentences)
+- [ ] `og:image` - Social sharing image (1200x630px recommended)
+- [ ] `og:url` - Canonical URL of the page
+- [ ] `og:type` - Set to "website"
+- [ ] `og:site_name` - "VerySimpleSEO"
+
+**Twitter Card Tags:**
+- [ ] `twitter:card` - Set to "summary_large_image"
+- [ ] `twitter:title` - Page title
+- [ ] `twitter:description` - Brief description
+- [ ] `twitter:image` - Same as og:image (or Twitter-specific version)
+- [ ] `twitter:site` - Your Twitter handle (e.g., "@verysimpleseo")
+
+**Structured Data (JSON-LD):**
+- [ ] **Organization Schema** - Company name, logo, social profiles
+- [ ] **WebSite Schema** - Site name, URL, search action (if applicable)
+- [ ] **SoftwareApplication Schema** - For SaaS product pages
+- [ ] **FAQPage Schema** - If you have FAQ section
+
+**Technical SEO:**
+- [ ] **robots.txt** - Allow search engines, disallow admin/private pages
+- [ ] **sitemap.xml** - Generate and submit to Google Search Console
+- [ ] **SSL Certificate** - Ensure HTTPS everywhere (should be handled by Kamal/Fly.io)
+- [ ] **404 Page** - Custom, helpful 404 page with navigation
+- [ ] **Page Speed** - Test with PageSpeed Insights (aim for 90+ score)
+- [ ] **Mobile Responsive** - Test on mobile devices
+- [ ] **XML Sitemap Priority** - Homepage (1.0), pricing/features (0.8), blog (0.6)
+
+**Google Search Console Setup:**
+- [ ] Add property for your domain
+- [ ] Submit sitemap.xml
+- [ ] Verify ownership via DNS or HTML file
+- [ ] Set up email alerts for crawl errors
+
+**Analytics Setup:**
+- [ ] **Google Analytics 4** - Install tracking code
+- [ ] **Conversion Tracking** - Track signups, subscriptions
+- [ ] **Event Tracking** - Track key actions (create project, generate article)
+
+#### Media & Asset Checklist
+
+**Favicons & Icons:**
+- [ ] **favicon.ico** - 16x16 and 32x32 (combined .ico file)
+- [ ] **favicon-16x16.png** - Standard favicon
+- [ ] **favicon-32x32.png** - Retina favicon
+- [ ] **apple-touch-icon.png** - 180x180 (iOS home screen)
+- [ ] **safari-pinned-tab.svg** - Monochrome SVG for Safari
+- [ ] **manifest.json** - Web app manifest with icon sizes:
+  - 192x192 (Android home screen)
+  - 512x512 (Android splash screen)
+
+**Social Sharing Images:**
+- [ ] **og-image.png** - Default Open Graph image (1200x630px)
+- [ ] **og-image-homepage.png** - Homepage-specific OG image
+- [ ] **og-image-pricing.png** - Pricing page-specific OG image
+- [ ] **twitter-card.png** - Optional Twitter-specific image (1200x630px)
+
+**Logo Assets:**
+- [ ] **logo.svg** - Vector logo for navbar
+- [ ] **logo-light.svg** - Light version for dark backgrounds
+- [ ] **logo-icon.svg** - Icon-only version (square, for tight spaces)
+- [ ] **logo-text.svg** - Text-only version (no icon)
+
+**Brand Assets:**
+- [ ] **Color Palette** - Document primary/secondary colors in CSS variables
+- [ ] **Typography** - Document font stack in Tailwind config
+- [ ] **Brand Guidelines** - Simple one-pager (optional but helpful)
+
+#### Rich Previews Testing
+
+Before launch, test how your site appears when shared:
+
+**Tools:**
+- [ ] **Facebook Sharing Debugger** - https://developers.facebook.com/tools/debug/
+- [ ] **Twitter Card Validator** - https://cards-dev.twitter.com/validator
+- [ ] **LinkedIn Post Inspector** - https://www.linkedin.com/post-inspector/
+- [ ] **Social Share Preview** - https://socialsharepreview.com/
+
+**Common Issues to Fix:**
+- [ ] OG image not loading → Check absolute URL, not relative
+- [ ] Description truncated → Keep under 160 characters
+- [ ] Image wrong aspect ratio → Use 1200x630 (1.91:1 ratio)
+- [ ] Cache issues → Force refresh with "Scrape Again" button
+
+#### Implementation Guide
+
+**Add to `app/views/layouts/application.html.erb`:**
+
+```erb
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title><%= content_for?(:title) ? yield(:title) : "VerySimpleSEO - Keyword Research & AI Article Generation" %></title>
+  <meta name="description" content="<%= content_for?(:description) ? yield(:description) : "Generate keyword research and SEO-optimized articles in minutes. No tools needed." %>">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="<%= request.original_url %>" />
+
+  <!-- Open Graph Tags -->
+  <meta property="og:title" content="<%= content_for?(:title) ? yield(:title) : "VerySimpleSEO" %>" />
+  <meta property="og:description" content="<%= content_for?(:description) ? yield(:description) : "Generate keyword research and SEO-optimized articles in minutes." %>" />
+  <meta property="og:image" content="<%= asset_url('og-image.png') %>" />
+  <meta property="og:url" content="<%= request.original_url %>" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="VerySimpleSEO" />
+
+  <!-- Twitter Card Tags -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="<%= content_for?(:title) ? yield(:title) : "VerySimpleSEO" %>" />
+  <meta name="twitter:description" content="<%= content_for?(:description) ? yield(:description) : "Generate keyword research and SEO-optimized articles in minutes." %>" />
+  <meta name="twitter:image" content="<%= asset_url('og-image.png') %>" />
+
+  <!-- Favicons -->
+  <%= favicon_link_tag 'favicon.ico' %>
+  <%= favicon_link_tag 'favicon-16x16.png', sizes: '16x16', type: 'image/png' %>
+  <%= favicon_link_tag 'favicon-32x32.png', sizes: '32x32', type: 'image/png' %>
+  <%= favicon_link_tag 'apple-touch-icon.png', rel: 'apple-touch-icon', sizes: '180x180' %>
+
+  <!-- ... rest of head ... -->
+</head>
+```
+
+**Create `config/sitemap.rb`:**
+
+```ruby
+# config/sitemap.rb
+# Generate with: rake sitemap:generate
+# Submit to Google: config/sitemap.xml
+
+# Public pages only (no authenticated routes)
+add '/', changefreq: 'weekly', priority: 1.0
+add '/pricing', changefreq: 'monthly', priority: 0.8
+add '/features', changefreq: 'monthly', priority: 0.7
+```
+
+**Create `public/robots.txt`:**
+
+```
+# Allow all search engines
+User-agent: *
+Allow: /
+
+# Disallow authenticated pages
+Disallow: /projects
+Disallow: /articles
+Disallow: /dashboard
+
+# Sitemap
+Sitemap: https://verysimpleseo.com/sitemap.xml
+```
+
+**Acceptance:**
+- ✅ All meta tags present on public pages
+- ✅ OG image displays correctly on Facebook/Twitter
+- ✅ Favicons show up in browser tabs and mobile home screens
+- ✅ Google Search Console verified and sitemap submitted
+- ✅ PageSpeed score 90+ on mobile and desktop
+- ✅ Social preview looks professional when shared
+
 ### 10.1 Create Marketing Homepage
 
 **Update `app/frontend/pages/Home.jsx`:**

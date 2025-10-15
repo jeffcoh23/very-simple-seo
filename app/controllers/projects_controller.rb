@@ -18,12 +18,6 @@ class ProjectsController < ApplicationController
 
   # POST /projects
   def create
-    # Check if user can create another project (usage limits)
-    unless can_create_project?
-      redirect_to pricing_path, alert: "Upgrade your plan to create more projects"
-      return
-    end
-
     @project = current_user.projects.new(project_params.except(:competitors))
 
     if @project.save
@@ -115,21 +109,8 @@ class ProjectsController < ApplicationController
       :description,
       seed_keywords: [],
       call_to_actions: [:text, :url],
-      competitors: [:domain, :title, :source]
+      competitors: [:domain, :title, :description, :source]
     )
-  end
-
-  def can_create_project?
-    # Free users: 1 project
-    # Pro users: 3 projects
-    # Max users: 10 projects
-    max_projects = case current_user.plan_name
-                   when "Pro" then 3
-                   when "Max" then 10
-                   else 1
-                   end
-
-    current_user.projects.count < max_projects
   end
 
   def handle_competitors(competitors_data)
@@ -149,11 +130,13 @@ class ProjectsController < ApplicationController
     valid_competitors.each do |competitor_data|
       domain = competitor_data[:domain]
       title = competitor_data[:title]
+      description = competitor_data[:description]
       source = competitor_data[:source] || 'manual'
 
       # Find existing or create new
       competitor = @project.competitors.find_or_initialize_by(domain: domain)
       competitor.title = title if title.present?
+      competitor.description = description if description.present?
       competitor.source = source
       competitor.save
     end
@@ -171,7 +154,7 @@ class ProjectsController < ApplicationController
       description: project.description,
       seed_keywords: project.seed_keywords || [],
       call_to_actions: project.call_to_actions,
-      competitors: project.competitors.map { |c| { id: c.id, domain: c.domain, source: c.source } },
+      competitors: project.competitors.map { |c| { id: c.id, domain: c.domain, title: c.title, description: c.description, source: c.source } },
       created_at: project.created_at,
       competitors_count: project.competitors.count,
       keywords_count: project.keywords.count,
