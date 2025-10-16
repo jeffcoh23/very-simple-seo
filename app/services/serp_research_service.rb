@@ -188,7 +188,9 @@ class SerpResearchService
           {
             "company": "Dropbox",
             "what_they_did": "created a demo video to validate their idea",
+            "how_they_did_it": "Posted 3-minute explainer video on Hacker News with waitlist link, no code written yet",
             "outcome": "got 75,000 signups overnight",
+            "timeline": "2008, before building the product",
             "relevance": "MVP validation"
           }
         ],
@@ -196,12 +198,25 @@ class SerpResearchService
           {
             "stat": "42% of startups fail due to no market need",
             "source": "CB Insights",
+            "source_url": "https://www.cbinsights.com/research/startup-failure-reasons-top/",
             "context": "why validation matters"
           }
         ]
       }
 
-      Extract every example and statistic you can find.
+      IMPORTANT INSTRUCTIONS:
+
+      For EXAMPLES:
+      - Extract not just WHAT they did, but HOW they did it (specific steps, tools, channels)
+      - Include WHEN/timeline if mentioned (e.g., "2008, before product launch")
+      - Be specific: "Posted on Hacker News" not just "shared online"
+      - If HOW details aren't in the text, leave "how_they_did_it" as empty string
+
+      For STATISTICS:
+      - Try to extract the source URL where the stat was found or referenced
+      - If no URL is available in the text, leave source_url as empty string
+
+      Extract every example and statistic you can find with maximum tactical detail.
     PROMPT
 
     client = Ai::ClientService.for_serp_analysis

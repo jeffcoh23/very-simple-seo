@@ -66,10 +66,22 @@ class ArticleWriterService
       #{intro_section&.dig('key_points')&.join("\n") || "- Hook the reader\n- Explain why this matters\n- Preview what they'll learn"}
 
       AVAILABLE EXAMPLES (use 1-2 if relevant):
-      #{examples.take(3).map { |ex| "- #{ex['company']}: #{ex['what_they_did']} → #{ex['outcome']}" }.join("\n")}
+      #{examples.take(3).map { |ex|
+        base = "- #{ex['company']}: #{ex['what_they_did']}"
+        base += " (HOW: #{ex['how_they_did_it']})" if ex['how_they_did_it'].present?
+        base += " (WHEN: #{ex['timeline']})" if ex['timeline'].present?
+        base += " → #{ex['outcome']}"
+        base
+      }.join("\n")}
 
       AVAILABLE STATISTICS (use 1-2 if relevant):
-      #{statistics.take(3).map { |stat| "- #{stat['stat']} (#{stat['source']})" }.join("\n")}
+      #{statistics.take(3).map { |stat|
+        if stat['source_url'].present?
+          "- #{stat['stat']} ([#{stat['source']}](#{stat['source_url']}))"
+        else
+          "- #{stat['stat']} (#{stat['source']})"
+        end
+      }.join("\n")}
 
       #{voice_instructions}
 
@@ -78,6 +90,8 @@ class ArticleWriterService
       REQUIREMENTS:
       - Hook reader in first sentence
       - Use a real example or statistic to establish credibility
+      - When using examples, include the HOW and WHEN details provided above for tactical depth
+      - When citing statistics, use the hyperlinked format shown above (e.g., "According to [CB Insights](url), 42%...")
       - Clearly explain what the article will cover
       - Write in markdown format
       - DO NOT include the heading (I'll add it)
@@ -139,10 +153,22 @@ class ArticleWriterService
       #{subsections.any? ? "SUBSECTIONS TO INCLUDE:\n#{subsections.map { |s| "- #{s['heading']}: #{s['key_points']&.join(', ')}" }.join("\n")}" : ""}
 
       AVAILABLE EXAMPLES (use 2-3 if relevant):
-      #{available_examples.take(5).map { |ex| "- #{ex['company']}: #{ex['what_they_did']} → #{ex['outcome']}" }.join("\n")}
+      #{available_examples.take(5).map { |ex|
+        base = "- #{ex['company']}: #{ex['what_they_did']}"
+        base += " (HOW: #{ex['how_they_did_it']})" if ex['how_they_did_it'].present?
+        base += " (WHEN: #{ex['timeline']})" if ex['timeline'].present?
+        base += " → #{ex['outcome']}"
+        base
+      }.join("\n")}
 
       AVAILABLE STATISTICS (use 2-3 if relevant):
-      #{available_statistics.take(5).map { |stat| "- #{stat['stat']} (#{stat['source']})" }.join("\n")}
+      #{available_statistics.take(5).map { |stat|
+        if stat['source_url'].present?
+          "- #{stat['stat']} ([#{stat['source']}](#{stat['source_url']}))"
+        else
+          "- #{stat['stat']} (#{stat['source']})"
+        end
+      }.join("\n")}
 
       #{visuals_text}
 
@@ -169,6 +195,10 @@ class ArticleWriterService
       - DO NOT repeat any examples or statistics already used in previous sections
       - Reference previous sections naturally if relevant (e.g., "As mentioned earlier...")
       - Use DIFFERENT examples from the available list above
+      - When using examples, include the HOW and WHEN details provided above for tactical depth
+      - GOOD: "Dropbox validated demand in 2008 by posting a 3-minute demo on Hacker News—before writing any code—and got 75,000 signups overnight"
+      - BAD: "Dropbox validated their idea with a demo video"
+      - When citing statistics, ALWAYS use the hyperlinked format shown above (e.g., "According to [CB Insights](url), 42%...")
       - Include bullet points or numbered lists where appropriate
       - Keep paragraphs short (2-4 sentences)
       - Use natural, conversational tone
@@ -383,6 +413,9 @@ class ArticleWriterService
     parts << ""
     parts << "VISUAL USAGE GUIDELINES:"
     parts << "- Embed 1-2 relevant images using: ![Description](url)"
+    parts << "- NEVER use the same image more than once in the entire article"
+    parts << "- If only 1 image available, use it in the MOST relevant section only"
+    parts << "- If no relevant images for this section, skip images entirely (better than forcing it)"
     parts << "- Add descriptive captions AFTER images using italics: *Caption text explaining what the image shows*"
     parts << "- Link to videos when highly relevant: [Watch: Tutorial name](video_url)"
     parts << "- Place visuals AFTER explaining the concept (not at start of section)"
