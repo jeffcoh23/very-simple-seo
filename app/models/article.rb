@@ -7,7 +7,30 @@ class Article < ApplicationRecord
   validates :keyword_id, uniqueness: true # One article per keyword
 
   def retry!
-    update!(status: :pending, error_message: nil)
+    update!(
+      status: :pending,
+      error_message: nil,
+      started_at: nil,
+      completed_at: nil
+    )
+    ArticleGenerationJob.perform_later(id)
+  end
+
+  def regenerate!
+    # Clear all generated data and restart from scratch
+    update!(
+      status: :pending,
+      error_message: nil,
+      content: nil,
+      title: nil,
+      meta_description: nil,
+      word_count: nil,
+      outline: nil,
+      serp_data: nil,
+      generation_cost: nil,
+      started_at: nil,
+      completed_at: nil
+    )
     ArticleGenerationJob.perform_later(id)
   end
 

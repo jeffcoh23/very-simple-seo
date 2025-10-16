@@ -187,7 +187,8 @@ class ProjectsController < ApplicationController
       starred: keyword.starred,
       has_article: keyword.article.present?,
       article_id: keyword.article&.id,
-      article_url: keyword.article.present? ? article_path(keyword.article) : nil
+      article_url: keyword.article.present? ? article_path(keyword.article) : nil,
+      new_article_url: new_keyword_article_path(keyword.id)
     }
   end
 end

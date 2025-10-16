@@ -1,7 +1,24 @@
 # app/controllers/articles_controller.rb
 class ArticlesController < ApplicationController
-  before_action :set_article, only: [:show, :destroy, :export]
+  before_action :set_article, only: [:show, :destroy, :export, :retry, :regenerate]
   before_action :set_project, only: [:create]
+  before_action :set_keyword, only: [:new]
+
+  # GET /keywords/:id/generate
+  def new
+    # Check if article already exists
+    if @keyword.article.present?
+      redirect_to article_path(@keyword.article), alert: "Article already exists for this keyword"
+      return
+    end
+
+    render inertia: "App/Articles/New", props: {
+      keyword: keyword_props(@keyword),
+      project: project_props_detailed(@keyword.project),
+      user_credits: current_user.credits,
+      estimated_cost: 0.22 # Average cost per article
+    }
+  end
 
   # POST /projects/:project_id/articles
   def create
@@ -74,7 +91,43 @@ class ArticlesController < ApplicationController
     end
   end
 
+  # POST /articles/:id/retry
+  def retry
+    unless @article.failed?
+      redirect_to article_path(@article), alert: "Can only retry failed articles"
+      return
+    end
+
+    @article.retry!
+    redirect_to article_path(@article), notice: "Retrying article generation..."
+  end
+
+  # POST /articles/:id/regenerate
+  def regenerate
+    # Check if user has credits (regenerate costs a credit)
+    unless current_user.has_credits?
+      redirect_to pricing_path, alert: "You're out of article credits. Please upgrade your plan."
+      return
+    end
+
+    # Deduct a credit
+    current_user.deduct_credit!
+
+    # Regenerate from scratch
+    @article.regenerate!
+
+    redirect_to article_path(@article), notice: "Regenerating article from scratch..."
+  end
+
   private
+
+  def set_keyword
+    @keyword = Keyword.joins(keyword_research: :project)
+                      .where(projects: { user_id: current_user.id })
+                      .find(params[:id])
+  rescue ActiveRecord::RecordNotFound
+    redirect_to projects_path, alert: "Keyword not found"
+  end
 
   def set_article
     @article = Article.find(params[:id])
@@ -134,6 +187,17 @@ class ArticlesController < ApplicationController
       difficulty: keyword.difficulty,
       opportunity: keyword.opportunity,
       intent: keyword.intent
+    }
+  end
+
+  def project_props_detailed(project)
+    {
+      id: project.id,
+      name: project.name,
+      domain: project.domain,
+      tone_of_voice: project.tone_of_voice,
+      call_to_actions: project.call_to_actions,
+      routes: project_routes(project)
     }
   end
 end

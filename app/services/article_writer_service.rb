@@ -103,6 +103,10 @@ class ArticleWriterService
   def write_section(section_outline, section_index, previous_sections)
     examples = @serp_data['detailed_examples'] || []
     statistics = @serp_data['statistics'] || []
+    visual_elements = @serp_data.dig('visual_elements') || {}
+    comparison_tables = @serp_data.dig('comparison_tables', 'tables') || []
+    step_by_step_guides = @serp_data.dig('step_by_step_guides', 'guides') || []
+    downloadable_resources = @serp_data.dig('downloadable_resources', 'resources') || []
 
     heading = section_outline['heading']
     word_count = section_outline['word_count'] || 400
@@ -115,6 +119,12 @@ class ArticleWriterService
     # Filter out already-used examples and statistics
     available_examples = filter_unused_examples(examples)
     available_statistics = filter_unused_statistics(statistics)
+
+    # Build visual elements section
+    visuals_text = build_visuals_prompt(visual_elements)
+    tables_text = build_tables_prompt(comparison_tables)
+    guides_text = build_guides_prompt(step_by_step_guides)
+    resources_text = build_resources_prompt(downloadable_resources)
 
     prompt = <<~PROMPT
       Write a section for an article about "#{@keyword}".
@@ -133,6 +143,14 @@ class ArticleWriterService
 
       AVAILABLE STATISTICS (use 2-3 if relevant):
       #{available_statistics.take(5).map { |stat| "- #{stat['stat']} (#{stat['source']})" }.join("\n")}
+
+      #{visuals_text}
+
+      #{tables_text}
+
+      #{guides_text}
+
+      #{resources_text}
 
       EXAMPLES ALREADY USED (DO NOT repeat these):
       #{@used_examples.uniq.join(", ")}
@@ -156,6 +174,7 @@ class ArticleWriterService
       - Use natural, conversational tone
       - Avoid AI clichés like "it's important to note" or "remember"
       - Make it actionable and specific with HOW details, not just WHAT
+      - Embed visuals, tables, guides, and resources when HIGHLY relevant to this section
     PROMPT
 
     client = Ai::ClientService.for_article_writing
@@ -290,6 +309,8 @@ class ArticleWriterService
 
     examples.each do |ex|
       company = ex['company']
+      next if company.nil? || company.empty? # Skip nil/empty company names
+
       # Check if company name appears in text (case-insensitive)
       used << company if text =~ /#{Regexp.escape(company)}/i
     end
@@ -306,6 +327,8 @@ class ArticleWriterService
 
     statistics.each do |stat|
       stat_text = stat['stat']
+      next if stat_text.nil? || stat_text.empty? # Skip nil/empty stats
+
       # Check if stat appears in text
       used << stat_text if text.include?(stat_text)
     end
@@ -329,5 +352,120 @@ class ArticleWriterService
     all_statistics.reject do |stat|
       @used_statistics.include?(stat['stat'])
     end
+  end
+
+  # Build prompt text for visual elements
+  def build_visuals_prompt(visual_elements)
+    images = visual_elements['images'] || []
+    videos = visual_elements['videos'] || []
+
+    return "" if images.empty? && videos.empty?
+
+    parts = []
+    parts << "VISUAL ELEMENTS AVAILABLE:"
+
+    unless images.empty?
+      parts << "Images:"
+      images.each do |img|
+        parts << "  - #{img['description']}"
+        parts << "    URL: #{img['url']}"
+      end
+    end
+
+    unless videos.empty?
+      parts << "Videos:"
+      videos.each do |vid|
+        parts << "  - #{vid['description']}"
+        parts << "    URL: #{vid['url']}"
+      end
+    end
+
+    parts << ""
+    parts << "VISUAL USAGE GUIDELINES:"
+    parts << "- Embed 1-2 relevant images using: ![Description](url)"
+    parts << "- Add descriptive captions AFTER images using italics: *Caption text explaining what the image shows*"
+    parts << "- Link to videos when highly relevant: [Watch: Tutorial name](video_url)"
+    parts << "- Place visuals AFTER explaining the concept (not at start of section)"
+    parts << "- Only use visuals that directly support your points"
+
+    parts.join("\n")
+  end
+
+  # Build prompt text for comparison tables
+  def build_tables_prompt(tables)
+    return "" if tables.empty?
+
+    parts = []
+    parts << "COMPARISON TABLES AVAILABLE:"
+
+    tables.each_with_index do |table, i|
+      parts << "#{i + 1}. #{table['title']}"
+      parts << "   Headers: #{table['headers'].join(' | ')}"
+      parts << "   Rows: #{table['rows'].size} rows of data"
+    end
+
+    parts << ""
+    parts << "TABLE USAGE GUIDELINES:"
+    parts << "- Include 1 comparison table if highly relevant to this section"
+    parts << "- Use markdown table format:"
+    parts << "  | Header 1 | Header 2 | Header 3 |"
+    parts << "  |----------|----------|----------|"
+    parts << "  | Data 1   | Data 2   | Data 3   |"
+    parts << "- Add context BEFORE the table: 'Here's how they compare:'"
+    parts << "- Add takeaway AFTER the table: '**Bottom line:** Choose X if...'"
+    parts << "- Only use tables that directly answer reader questions"
+
+    parts.join("\n")
+  end
+
+  # Build prompt text for step-by-step guides
+  def build_guides_prompt(guides)
+    return "" if guides.empty?
+
+    parts = []
+    parts << "STEP-BY-STEP GUIDES AVAILABLE:"
+
+    guides.each_with_index do |guide, i|
+      parts << "#{i + 1}. #{guide['title']}"
+      parts << "   Steps: #{guide['steps'].size} actionable steps"
+      parts << "   Outcome: #{guide['outcome']}" if guide['outcome']
+    end
+
+    parts << ""
+    parts << "GUIDE USAGE GUIDELINES:"
+    parts << "- Include 1 actionable guide if highly relevant to this section"
+    parts << "- Use numbered list format with bold labels:"
+    parts << "  1. **Day 1-2:** Action with specific details"
+    parts << "  2. **Day 3-4:** Next action with tools/timelines"
+    parts << "- Add expected outcome at the end"
+    parts << "- Make each step specific with tools, timelines, or exact actions"
+    parts << "- Only use guides that provide immediate value to readers"
+
+    parts.join("\n")
+  end
+
+  # Build prompt text for downloadable resources
+  def build_resources_prompt(resources)
+    return "" if resources.empty?
+
+    parts = []
+    parts << "FREE RESOURCES AVAILABLE:"
+
+    resources.each_with_index do |resource, i|
+      parts << "#{i + 1}. #{resource['title']} (#{resource['type']})"
+      parts << "   #{resource['description']}"
+      parts << "   URL: #{resource['url']}"
+    end
+
+    parts << ""
+    parts << "RESOURCE USAGE GUIDELINES:"
+    parts << "- Link to 1-2 relevant free resources when they add value"
+    parts << "- Format: **[Resource Title](url)**"
+    parts << "- Explain WHAT the resource is and WHY it's useful"
+    parts << "- Add context: 'This Google Sheets template includes...'"
+    parts << "- Use clear CTA: 'Download the [X]', 'Get the free [Y]'"
+    parts << "- Only link to resources that readers can immediately use"
+
+    parts.join("\n")
   end
 end

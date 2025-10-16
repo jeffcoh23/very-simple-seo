@@ -15,8 +15,13 @@ Rails.application.routes.draw do
   resources :articles, only: [:show, :destroy] do
     member do
       get :export
+      post :retry
+      post :regenerate
     end
   end
+
+  # Article generation page
+  get "/keywords/:id/generate", to: "articles#new", as: :new_keyword_article
 
   root to: "pages#home"
   mount LetterOpenerWeb::Engine, at: "/letter_opener" if Rails.env.development?

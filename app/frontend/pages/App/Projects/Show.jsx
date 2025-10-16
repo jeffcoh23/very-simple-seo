@@ -5,8 +5,7 @@ import AppLayout from "@/layout/AppLayout"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Loader2, TrendingUp, Eye, Star, Download, ChevronDown, ChevronUp } from "lucide-react"
-import ArticleGenerateForm from "@/components/app/ArticleGenerateForm"
+import { ArrowLeft, Loader2, TrendingUp, Eye, Star, FileText, ChevronDown, ChevronUp } from "lucide-react"
 
 export default function ProjectsShow() {
   const { project, keywordResearch, keywords } = usePage().props
@@ -301,11 +300,16 @@ export default function ProjectsShow() {
                                 </Button>
                               </Link>
                             ) : (
-                              <ArticleGenerateForm
-                                keyword={keyword}
-                                createArticleUrl={project.routes.create_article}
-                                hasCredits={auth.user.has_credits}
-                              />
+                              <Link href={keyword.new_article_url}>
+                                <Button
+                                  size="sm"
+                                  className="border-2 shadow-md hover:shadow-lg"
+                                  disabled={!auth.user.has_credits}
+                                >
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  Generate Article
+                                </Button>
+                              </Link>
                             )}
                           </td>
                         </tr>

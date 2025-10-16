@@ -105,6 +105,8 @@ def article_routes(article)
     delete_article: article_path(article),
     export_markdown: export_article_path(article, format: 'markdown'),
     export_html: export_article_path(article, format: 'html'),
+    retry_article: retry_article_path(article),
+    regenerate_article: regenerate_article_path(article),
     project: project_path(article.project)
   }
 end

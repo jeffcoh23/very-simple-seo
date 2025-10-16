@@ -9,6 +9,7 @@ class KeywordResearchService
     @keyword_research = keyword_research
     @project = keyword_research.project
     @keywords = {}
+    @keyword_similarities = {} # Store semantic similarity scores for opportunity calculation
   end
 
   def perform
@@ -60,6 +61,16 @@ class KeywordResearchService
     # Store seeds in keyword_research record
     @keyword_research.update!(seed_keywords: seeds)
 
+    # Calculate semantic similarity for seed keywords (for opportunity scoring)
+    domain_context = build_domain_context
+    similarity_service = SemanticSimilarityService.new
+    seed_similarities = similarity_service.batch_similarity(domain_context, seeds)
+
+    # Store seed similarities
+    seed_similarities.each do |result|
+      @keyword_similarities[result[:keyword]] = result[:similarity]
+    end
+
     # Add each seed to our keywords hash
     seeds.each { |seed| add_keyword(seed, source: "seed") }
 
@@ -70,9 +81,23 @@ class KeywordResearchService
     Rails.logger.info "Step 2: Expanding keywords..."
 
     all_expanded = []
+    google_ads_suggestions = [] # Track Google Ads API suggestions separately
 
     @keyword_research.seed_keywords.each do |seed|
       Rails.logger.info "  Expanding: #{seed}"
+
+      # Google Ads API keyword suggestions (BEST - includes metrics + variations)
+      if ENV["GOOGLE_ADS_DEVELOPER_TOKEN"].present?
+        google_ads = GoogleAdsService.new
+        ads_metrics = google_ads.get_keyword_metrics([seed])
+
+        if ads_metrics
+          # Extract just the keywords from the metrics hash
+          ads_keywords = ads_metrics.keys
+          google_ads_suggestions.concat(ads_keywords)
+          Rails.logger.info "    Google Ads API: #{ads_keywords.size} suggestions"
+        end
+      end
 
       # Google autocomplete suggestions
       suggestions = GoogleSuggestionsService.new(seed).fetch
@@ -89,8 +114,11 @@ class KeywordResearchService
       sleep 2 # Be nice to Google
     end
 
+    # Combine all sources
+    all_expanded.concat(google_ads_suggestions)
     all_expanded = all_expanded.uniq
-    Rails.logger.info "Expanded to #{all_expanded.size} keywords before filtering"
+
+    Rails.logger.info "Expanded to #{all_expanded.size} keywords (#{google_ads_suggestions.uniq.size} from Google Ads API)"
 
     # Layer 1: Semantic similarity pre-filter (fast, catches obvious mismatches)
     semantically_filtered = filter_by_semantic_similarity(all_expanded)
@@ -163,7 +191,13 @@ class KeywordResearchService
         @keywords[kw][:difficulty] = metrics[:difficulty]
         @keywords[kw][:cpc] = metrics[:cpc]
         @keywords[kw][:intent] = metrics[:intent]
-        @keywords[kw][:opportunity] = KeywordMetricsService.calculate_opportunity(metrics)
+
+        # Pass semantic similarity to opportunity calculation
+        semantic_similarity = @keyword_similarities[kw]
+        @keywords[kw][:opportunity] = KeywordMetricsService.calculate_opportunity(
+          metrics,
+          semantic_similarity: semantic_similarity
+        )
       end
     else
       # Fall back to heuristics for each keyword
@@ -175,7 +209,13 @@ class KeywordResearchService
         data[:difficulty] = metrics[:difficulty]
         data[:cpc] = metrics[:cpc]
         data[:intent] = metrics[:intent]
-        data[:opportunity] = KeywordMetricsService.calculate_opportunity(metrics)
+
+        # Pass semantic similarity to opportunity calculation
+        semantic_similarity = @keyword_similarities[kw]
+        data[:opportunity] = KeywordMetricsService.calculate_opportunity(
+          metrics,
+          semantic_similarity: semantic_similarity
+        )
       end
     end
 
@@ -305,6 +345,9 @@ class KeywordResearchService
     # Batch calculate similarity for all keywords
     similarity_results = similarity_service.batch_similarity(domain_context, keywords)
 
+    # DON'T reset @keyword_similarities - we want to preserve seed similarities calculated earlier
+    # @keyword_similarities already initialized in initialize() and populated in generate_seed_keywords()
+
     # Filter and log rejected keywords
     filtered_keywords = []
     rejected_count = 0
@@ -312,6 +355,7 @@ class KeywordResearchService
     similarity_results.each do |result|
       if result[:similarity] >= SIMILARITY_THRESHOLD
         filtered_keywords << result[:keyword]
+        @keyword_similarities[result[:keyword]] = result[:similarity] # Store for opportunity calc
       else
         rejected_count += 1
         Rails.logger.info "  ⨯ Rejected '#{result[:keyword]}' (similarity: #{result[:similarity].round(3)})"

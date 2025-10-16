@@ -55,25 +55,43 @@ class KeywordMetricsService
     keywords.map { |kw| new(kw).calculate.merge(keyword: kw.downcase.strip) }
   end
 
-  def self.calculate_opportunity(metrics)
-    # Opportunity score: balance between volume and difficulty
-    # Higher volume + lower difficulty = higher opportunity
+  def self.calculate_opportunity(metrics, semantic_similarity: nil)
+    # Multi-factor opportunity score balancing:
+    # - Volume (40%): Traffic potential, capped at 2000 to prevent mega-volume dominance
+    # - Difficulty (30%): Ranking feasibility (inverted: easier = higher score)
+    # - Semantic Relevance (30%): Domain fit (prioritizes relevant keywords)
 
     # Return nil if we don't have the required metrics
     return nil unless metrics[:volume] && metrics[:difficulty]
 
-    volume_score = normalize(metrics[:volume], max: 500) # Normalize to 0-100
-    difficulty_inverse = 100 - metrics[:difficulty] # Invert difficulty
+    # Factor 1: Volume Score (0-40 points)
+    # Cap at 2000 so mega-volume keywords don't max out
+    volume_score = normalize(metrics[:volume], max: 2000) * 0.4
 
-    # Weighted average (favor volume slightly)
-    opportunity = (volume_score * 0.6) + (difficulty_inverse * 0.4)
+    # Factor 2: Difficulty Score (0-30 points)
+    # Invert: easier = higher score
+    difficulty_score = (100 - metrics[:difficulty]) * 0.3
 
-    # Boost for good intent
-    opportunity += 5 if ["informational", "educational"].include?(metrics[:intent])
-    opportunity += 10 if metrics[:intent] == "commercial"
+    # Factor 3: Semantic Relevance Score (0-30 points)
+    # Higher relevance to domain = higher score
+    relevance_score = semantic_similarity ? (semantic_similarity * 30) : 0
 
-    # Penalty for very low volume
+    # Base opportunity
+    opportunity = volume_score + difficulty_score + relevance_score
+
+    # Smart Penalty: Mega-volume + low relevance = generic keyword
+    # Catches keywords like "ai tools", "business ideas" that have high volume but aren't specific to domain
+    if metrics[:volume] > 10000 && semantic_similarity && semantic_similarity < 0.4
+      opportunity -= 20
+      Rails.logger.info "  ⚠️  Penalized mega-volume low-relevance: #{metrics[:keyword]} (vol: #{metrics[:volume]}, sim: #{semantic_similarity.round(3)})"
+    end
+
+    # Penalty: Ultra-low volume keywords
     opportunity -= 20 if metrics[:volume] < 50
+
+    # Bonus: Commercial intent (more likely to convert)
+    opportunity += 10 if metrics[:intent] == "commercial"
+    opportunity += 5 if ["informational", "educational"].include?(metrics[:intent])
 
     [[opportunity, 0].max, 100].min.round
   end

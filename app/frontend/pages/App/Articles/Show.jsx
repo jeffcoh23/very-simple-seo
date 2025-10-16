@@ -5,7 +5,7 @@ import AppLayout from "@/layout/AppLayout"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Loader2, Download, FileText, Eye, Trash2 } from "lucide-react"
+import { ArrowLeft, Loader2, Download, FileText, Eye, Trash2, RefreshCw, RotateCcw } from "lucide-react"
 
 export default function ArticlesShow() {
   const { article, project, keyword } = usePage().props
@@ -13,7 +13,6 @@ export default function ArticlesShow() {
   const [articleStatus, setArticleStatus] = useState(article.status)
   const [articleContent, setArticleContent] = useState(article.content)
   const [wordCount, setWordCount] = useState(article.word_count || 0)
-  const [generationCost, setGenerationCost] = useState(article.generation_cost || 0)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [progressMessage, setProgressMessage] = useState("")
   const [progressLog, setProgressLog] = useState([])
@@ -36,7 +35,6 @@ export default function ArticlesShow() {
 
           setArticleStatus(data.status)
           setWordCount(data.word_count || 0)
-          setGenerationCost(data.generation_cost || 0)
 
           // Update progress message
           if (data.progress_message) {
@@ -183,11 +181,11 @@ export default function ArticlesShow() {
 
                   <div className="mt-2 space-y-1">
                     <p className="text-xs text-info">
-                      This takes about 60 seconds. We're researching competitors, creating an outline, and writing your article.
+                      This takes about 1-5 minutes. We're researching competitors, creating an outline, and writing your article.
                     </p>
                     {wordCount > 0 && (
                       <p className="text-xs text-info">
-                        Progress: {wordCount} words • ${generationCost.toFixed(2)} cost
+                        Progress: {wordCount} words written
                       </p>
                     )}
                   </div>
@@ -200,25 +198,45 @@ export default function ArticlesShow() {
         {articleStatus === 'failed' && article.error_message && (
           <Card className="bg-destructive-soft border-2 border-destructive/30">
             <CardContent className="py-4">
-              <h3 className="font-semibold text-destructive">Generation failed</h3>
-              <p className="text-sm text-destructive mt-1">{article.error_message}</p>
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-destructive">Generation failed</h3>
+                  <p className="text-sm text-destructive mt-1">{article.error_message}</p>
+                </div>
+                <div className="flex gap-2 ml-4">
+                  <Button
+                    variant="outline"
+                    className="border-2 border-destructive text-destructive hover:bg-destructive/10"
+                    onClick={() => router.post(article.routes.retry_article)}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Retry
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-2 border-primary text-primary hover:bg-primary/10"
+                    onClick={() => {
+                      if (confirm("Regenerate from scratch? This will cost 1 credit.")) {
+                        router.post(article.routes.regenerate_article)
+                      }
+                    }}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Regenerate
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
 
         {/* Article Stats */}
         {articleStatus === 'completed' && (
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <Card className="border-2">
               <CardContent className="pt-6">
                 <div className="text-2xl font-bold">{wordCount}</div>
                 <div className="text-sm text-muted-foreground">Words</div>
-              </CardContent>
-            </Card>
-            <Card className="border-2">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">${generationCost.toFixed(2)}</div>
-                <div className="text-sm text-muted-foreground">Generation Cost</div>
               </CardContent>
             </Card>
             <Card className="border-2">
