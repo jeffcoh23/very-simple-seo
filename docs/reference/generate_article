@@ -646,7 +646,7 @@ class ArticleGenerator
 
       REQUIREMENTS:
       - Summarize key takeaways (2-3 bullets)
-      - Include call-to-action (try SignalLab for validation)
+      - Include call-to-action (try our validation tool)
       - 150-200 words
       - Use voice profile:
 
@@ -983,7 +983,7 @@ class ArticleGenerator
         {
           "heading" => "Using AI Tools for Faster Validation",
           "subheadings" => ["Market intelligence", "Automated persona generation", "Competitive analysis"],
-          "key_points" => ["AI-powered validation", "Tools comparison", "SignalLab approach"],
+          "key_points" => ["AI-powered validation", "Tools comparison", "Tool approaches"],
           "word_count" => 400,
           "type" => "standard"
         },
@@ -1063,7 +1063,7 @@ class ArticleGenerator
       - **This month:** Analyze patterns and validate your core assumptions
       - **Before building:** Make sure at least 30% of people you talk to are actively looking for a solution
 
-      if you want to speed up the process, try SignalLab. it uses AI to generate customer personas, identify objections, and analyze your market - giving you validation insights in 10 minutes instead of 3 weeks.
+      if you want to speed up the process, try using AI validation tools. they can help generate customer personas, identify objections, and analyze your market - giving you validation insights in minutes instead of weeks.
 
       most importantly: don't skip this step. the 2-3 weeks you spend on validation will save you 6-12 months of building something nobody wants.
 

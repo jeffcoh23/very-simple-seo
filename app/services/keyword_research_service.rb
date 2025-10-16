@@ -15,47 +15,129 @@ class KeywordResearchService
   def perform
     Rails.logger.info "Starting keyword research for project: #{@project.name}"
 
-    # 1. Generate seed keywords from project domain + competitors
+    # NEW FLOW: Competitors inform seeds
+    # 1. Scrape YOUR domain (if not cached)
+    scrape_domain
+
+    # 2. Discover and scrape competitors (Grounding)
+    discover_and_scrape_competitors
+
+    # 3. Generate seed keywords (using competitor insights)
     generate_seed_keywords
 
-    # 2. Expand via Google autocomplete, PAA, related searches
+    # 4. Expand via Google autocomplete, PAA, related searches
     expand_keywords
 
-    # 3. Mine Reddit topics (DISABLED - too noisy, creates ultra long-tail keywords with no volume)
+    # 5. Mine Reddit topics (DISABLED - too noisy, creates ultra long-tail keywords with no volume)
     # mine_reddit
 
-    # 4. Scrape competitor sitemaps and pages
+    # 6. Scrape competitor sitemaps and pages (additional source)
     analyze_competitors
 
-    # 5. Calculate metrics (heuristics)
+    # 7. Calculate metrics (heuristics or Google Ads API)
     calculate_metrics
 
-    # 6. Save top 30 keywords to database
+    # 8. Save top keywords to database (with filters)
     save_keywords
 
-    # 7. Mark research as completed
+    # 9. Mark research as completed
     @keyword_research.update!(
       status: :completed,
       total_keywords_found: @keywords.size,
       completed_at: Time.current
     )
 
-    Rails.logger.info "Keyword research completed. Found #{@keywords.size} keywords, saved top 30."
+    Rails.logger.info "Keyword research completed. Found #{@keywords.size} keywords, saved top keywords."
   end
 
   private
 
+  # Step 1: Scrape YOUR domain (if not already cached)
+  def scrape_domain
+    return if @project.domain_analysis.present?
+
+    Rails.logger.info "Step 1: Scraping YOUR domain for content analysis..."
+    service = DomainAnalysisService.new(@project.domain)
+    domain_data = service.analyze
+
+    if domain_data && !domain_data[:error]
+      @project.update(domain_analysis: domain_data)
+      Rails.logger.info "Domain analysis cached for future use"
+    else
+      Rails.logger.warn "Failed to scrape domain, will use fallback context"
+    end
+  end
+
+  # Step 2: Discover and scrape competitors using Grounding
+  def discover_and_scrape_competitors
+    Rails.logger.info "Step 2: Discovering and scrape competitors with Grounding..."
+
+    # Skip if user manually added competitors
+    if @project.competitors.any?
+      Rails.logger.info "Using #{@project.competitors.count} user-provided competitors"
+      competitor_domains = @project.competitors.pluck(:domain)
+    else
+      # Build rich context from domain analysis
+      domain_data = @project.domain_analysis || {}
+
+      # Use Grounding to discover competitors with rich context
+      grounding = GoogleGroundingService.new
+
+      # Build detailed query with actual business description
+      query = build_competitor_discovery_query(domain_data)
+      Rails.logger.info "Grounding query: #{query[0..200]}..."
+
+      json_structure = [
+        "competitor1.com",
+        "competitor2.com",
+        "competitor3.com"
+      ].to_json
+
+      result = grounding.search_json(query, json_structure_hint: json_structure)
+
+      if result[:success]
+        competitor_domains = parse_competitor_domains(result[:data])
+        Rails.logger.info "Discovered #{competitor_domains.size} competitors via Grounding"
+
+        # Log what was found for debugging
+        competitor_domains.first(5).each do |domain|
+          Rails.logger.info "  - #{domain}"
+        end
+      else
+        Rails.logger.warn "Grounding competitor discovery failed: #{result[:error]}"
+        competitor_domains = []
+      end
+    end
+
+    # Scrape discovered competitors
+    @competitor_data = []
+
+    competitor_domains.first(10).each do |domain|
+      Rails.logger.info "  Scraping #{domain}..."
+      service = DomainAnalysisService.new(domain)
+      data = service.analyze
+
+      if data && !data[:error]
+        @competitor_data << data
+      end
+
+      sleep 1 # Be nice to servers
+    end
+
+    Rails.logger.info "Scraped #{@competitor_data.size} competitors successfully"
+  end
+
   def generate_seed_keywords
-    Rails.logger.info "Step 1: Generating seed keywords..."
+    Rails.logger.info "Step 3: Generating seed keywords..."
 
     # Use project.seed_keywords if user provided them, otherwise generate
     if @project.seed_keywords.present? && @project.seed_keywords.any?
       Rails.logger.info "Using #{@project.seed_keywords.size} user-provided seed keywords"
       seeds = @project.seed_keywords
     else
-      Rails.logger.info "Generating seed keywords from domain content..."
+      Rails.logger.info "Generating seed keywords from domain + competitor insights..."
       generator = SeedKeywordGenerator.new(@project)
-      seeds = generator.generate
+      seeds = generator.generate_with_competitors(@competitor_data || [])
     end
 
     # Store seeds in keyword_research record
@@ -307,6 +389,8 @@ class KeywordResearchService
   end
 
   # Build semantic "fingerprint" of domain for similarity matching
+  # NOTE: Many modern sites (SPAs) don't have H1s/H2s accessible to Nokogiri,
+  # so we rely on meta tags + seed keywords + sitemap keywords
   def build_domain_context
     domain_data = @project.domain_analysis
 
@@ -326,13 +410,42 @@ class KeywordResearchService
       return [@project.name, @project.niche, @project.description].compact.join(". ")
     end
 
-    # Combine key content elements into contextual summary
-    [
-      domain_data[:title],
-      domain_data[:meta_description],
-      domain_data[:h1s]&.first(3)&.join(". "),
-      domain_data[:h2s]&.first(5)&.join(". ")
-    ].compact.join(". ")
+    # Build context parts
+    context_parts = []
+
+    # 1. Meta tags (most reliable for SPAs)
+    context_parts << domain_data[:title] if domain_data[:title].present?
+    context_parts << domain_data[:meta_description] if domain_data[:meta_description].present?
+
+    # 2. Headings (if available - only for non-SPA sites)
+    if domain_data[:h1s]&.any?
+      context_parts << domain_data[:h1s].first(3).join(". ")
+    end
+    if domain_data[:h2s]&.any?
+      context_parts << domain_data[:h2s].first(5).join(". ")
+    end
+
+    # 3. Sitemap keywords (good signal for SPA sites)
+    if domain_data[:sitemap_keywords]&.any?
+      context_parts << "Topics: #{domain_data[:sitemap_keywords].first(10).join(', ')}"
+    end
+
+    # 4. Seed keywords (if available - they're already validated as relevant)
+    if @keyword_research&.seed_keywords&.any?
+      context_parts << "Related keywords: #{@keyword_research.seed_keywords.first(10).join(', ')}"
+    end
+
+    # 5. Project metadata as fallback
+    if context_parts.empty?
+      Rails.logger.warn "No context from domain scraping, using project metadata"
+      context_parts << @project.name
+      context_parts << @project.niche
+      context_parts << @project.description if @project.description.present?
+    end
+
+    context = context_parts.compact.join(". ")
+    Rails.logger.info "Built domain context (#{context.length} chars): #{context.first(150)}..."
+    context
   end
 
   # Filter keywords by semantic similarity to domain context
@@ -365,5 +478,64 @@ class KeywordResearchService
     Rails.logger.info "Semantic filter removed #{rejected_count} keywords (threshold: #{SIMILARITY_THRESHOLD})"
 
     filtered_keywords
+  end
+
+  # Build rich competitor discovery query for Grounding
+  def build_competitor_discovery_query(domain_data)
+    # Extract key info from domain
+    meta_description = domain_data[:meta_description]
+    domain = @project.domain.gsub(%r{^https?://}, '').gsub(%r{^www\.}, '').gsub(%r{/$}, '')
+
+    # Use meta description if available, otherwise use project description
+    # Fall back to project name + niche if no description
+    description = meta_description.presence ||
+                  @project.description.presence ||
+                  "#{@project.name} - #{@project.niche}"
+
+    # Build query - let Grounding figure out what's relevant based on the description
+    <<~QUERY
+      Find the top 10-20 direct competitor websites for this business:
+      "#{description}"
+
+      Domain: #{domain}
+
+      Find competitors that offer similar services or solve the same problems for the same target audience.
+      Focus on direct competitors that are active and well-known in this space.
+
+      Return ONLY the competitor domain names as a JSON array of strings.
+      Format: ["competitor1.com", "competitor2.com", "competitor3.com"]
+    QUERY
+  end
+
+  # Parse competitor domains from Grounding JSON response
+  def parse_competitor_domains(data)
+    competitors = case data
+    when Array
+      data.map { |c| normalize_domain(c) }
+    when Hash
+      (data["competitors"] || data["domains"] || []).map { |c| normalize_domain(c) }
+    else
+      []
+    end
+
+    competitors.compact.uniq.first(10)
+  end
+
+  # Normalize domain format
+  def normalize_domain(competitor)
+    return nil if competitor.blank?
+
+    domain = competitor.is_a?(Hash) ? (competitor["domain"] || competitor["url"]) : competitor
+    return nil if domain.blank?
+
+    domain = domain.to_s.strip
+                   .gsub(%r{^https?://}, '')
+                   .gsub(%r{^www\.}, '')
+                   .gsub(%r{/$}, '')
+                   .split('/').first
+
+    return nil if domain.empty? || !domain.include?('.')
+
+    domain.downcase
   end
 end

@@ -21,6 +21,24 @@ class SeedKeywordGenerator
     @api_calls_used = 0
   end
 
+  # New method: accepts pre-scraped competitor data (from service)
+  def generate_with_competitors(competitor_data)
+    Rails.logger.info "Generating seed keywords with Grounding for: #{@domain}"
+    Rails.logger.info "Using #{competitor_data.size} pre-scraped competitors"
+
+    # Step 1: Get YOUR domain data (should be cached by service)
+    domain_data = @project&.domain_analysis || scrape_domain
+
+    # Step 2: Generate seeds via Grounding using YOUR domain + competitor data
+    seeds = generate_seeds_via_grounding(domain_data, competitor_data)
+    @api_calls_used += 1
+    Rails.logger.info "  Generated #{seeds.size} seeds from Grounding (API calls: #{@api_calls_used})"
+
+    Rails.logger.info "Total API calls used: #{@api_calls_used}"
+    seeds
+  end
+
+  # Legacy method for backward compatibility (autofill, etc.)
   def generate
     Rails.logger.info "Generating seed keywords with Grounding for: #{@domain}"
     Rails.logger.info "API call budget: 3 Grounding calls max"

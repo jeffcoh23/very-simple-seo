@@ -16,29 +16,29 @@ Dotenv.load
 require_relative "lib/google_ads_service"
 require_relative "lib/seed_keyword_generator"
 
-# Keyword Research Script for SignalLab
+# Keyword Research Script Example
 # Finds the best keywords to target for SEO content
 
 class KeywordResearcher
   COMPETITORS = [
-    "founderpal.ai",
-    "validatorai.com",
-    "ideaproof.io",
-    "dimeadozen.ai",
-    "ideabuddy.com"
+    "competitor1.com",
+    "competitor2.com",
+    "competitor3.com",
+    "competitor4.com",
+    "competitor5.com"
   ]
 
   def initialize
     @keywords = {}
     @google_ads = GoogleAdsService.new
     @seed_generator = SeedKeywordGenerator.new(
-      product_domain: "signallab.app",
+      product_domain: "yourdomain.com",
       competitor_domains: COMPETITORS
     )
   end
 
   def run
-    puts "🔍 Starting keyword research for SignalLab..."
+    puts "🔍 Starting keyword research for your domain..."
     puts "=" * 80
 
     # Step 1: Generate seed keywords
