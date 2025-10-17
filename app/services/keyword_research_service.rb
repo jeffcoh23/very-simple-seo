@@ -2,7 +2,6 @@
 # Main orchestration service for keyword research
 class KeywordResearchService
   # Thresholds for filtering
-  OPPORTUNITY_THRESHOLD_FOR_MEDIUM = 70 # Minimum opportunity score for medium confidence keywords
   SIMILARITY_THRESHOLD = 0.30 # Minimum semantic similarity (0-1 scale, tuned to 0.30 for balance)
 
   def initialize(keyword_research)
@@ -206,23 +205,18 @@ class KeywordResearchService
 
     Rails.logger.info "Expanded to #{all_expanded.size} keywords (#{google_ads_suggestions.uniq.size} from Google Ads API)"
 
-    # Layer 1: Semantic similarity pre-filter (fast, catches obvious mismatches)
+    # Semantic similarity filter (fast, catches obvious mismatches)
     semantically_filtered = filter_by_semantic_similarity(all_expanded)
     Rails.logger.info "After semantic filtering: #{semantically_filtered.size} keywords"
 
-    # Layer 2: AI relevance filter with confidence levels
-    filter = KeywordRelevanceFilter.new(@project)
-    keywords_with_confidence = filter.filter_with_confidence(semantically_filtered)
-
-    # Add keywords with their confidence metadata
-    keywords_with_confidence.each do |keyword, confidence|
-      next if confidence == "low" # Skip low confidence entirely
-
-      # Add keyword with confidence metadata (we'll use this later for Option 2 filtering)
-      add_keyword(keyword, source: "expansion", confidence: confidence)
+    # Add all semantically-filtered keywords
+    # (No AI filter - it was inconsistent and expensive)
+    # Rely on: semantic similarity + volume + opportunity for quality
+    semantically_filtered.each do |keyword|
+      add_keyword(keyword, source: "expansion")
     end
 
-    Rails.logger.info "After AI filtering: #{@keywords.size} keywords (will apply Option 2 filter after metrics)"
+    Rails.logger.info "Added #{@keywords.size} keywords (will filter by volume >= 10 and opportunity after metrics)"
   end
 
   def mine_reddit
@@ -339,40 +333,8 @@ class KeywordResearchService
 
     Rails.logger.info "Filtered to #{viable_keywords.size} keywords with volume >= 10"
 
-    # Option 2 Filter: Apply confidence-based opportunity threshold
-    # High confidence = keep (always)
-    # Medium confidence + Opp > 70 = keep
-    # Medium confidence + Opp ≤ 70 = remove
-    # Low confidence = already removed earlier
-    # No confidence (seed/competitor) = keep (trust the source)
-
-    before_count = viable_keywords.size
-    filtered_keywords = viable_keywords.select do |kw|
-      confidence = kw[:confidence]
-
-      if confidence == "high" || confidence.nil?
-        # High confidence or no confidence (seed/competitor) = always keep
-        true
-      elsif confidence == "medium"
-        # Medium confidence = only keep if high opportunity
-        opportunity = kw[:opportunity] || 0
-        keep = opportunity > OPPORTUNITY_THRESHOLD_FOR_MEDIUM
-
-        unless keep
-          Rails.logger.info "  ⨯ Filtered medium-confidence '#{kw[:keyword]}' (opp: #{opportunity})"
-        end
-
-        keep
-      else
-        # Low confidence should have been filtered already, but just in case
-        false
-      end
-    end
-
-    Rails.logger.info "Option 2 filter removed #{before_count - filtered_keywords.size} medium-confidence low-opportunity keywords"
-
     # Sort by opportunity score (highest first), treating nil as 0
-    sorted = filtered_keywords.sort_by { |kw| -(kw[:opportunity] || 0) }
+    sorted = viable_keywords.sort_by { |kw| -(kw[:opportunity] || 0) }
 
     # Save top 100 (or all if less than 100)
     top_keywords = sorted.first(100)
