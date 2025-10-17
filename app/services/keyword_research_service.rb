@@ -414,6 +414,9 @@ class KeywordResearchService
       return [@project.name, @project.niche, @project.description].compact.join(". ")
     end
 
+    # Convert to symbol keys if needed (domain_analysis is stored with string keys in JSONB)
+    domain_data = domain_data.deep_symbolize_keys if domain_data.is_a?(Hash)
+
     # Build context parts
     context_parts = []
 
