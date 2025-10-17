@@ -393,8 +393,7 @@ class KeywordResearchService
   end
 
   # Build semantic "fingerprint" of domain for similarity matching
-  # NOTE: Many modern sites (SPAs) don't have H1s/H2s accessible to Nokogiri,
-  # so we rely on meta tags + seed keywords + sitemap keywords
+  # ENHANCED: Creates rich, detailed context for better semantic filtering
   def build_domain_context
     domain_data = @project.domain_analysis
 
@@ -420,38 +419,54 @@ class KeywordResearchService
     # Build context parts
     context_parts = []
 
-    # 1. Meta tags (most reliable for SPAs)
+    # 1. Core business description (what you do)
     context_parts << domain_data[:title] if domain_data[:title].present?
     context_parts << domain_data[:meta_description] if domain_data[:meta_description].present?
 
-    # 2. Headings (if available - only for non-SPA sites)
+    # 2. Detailed problem/solution context
+    # Add explicit statements about what the business does
+    if @project.description.present?
+      context_parts << "This business: #{@project.description}"
+    end
+
+    if @project.niche.present?
+      context_parts << "Industry: #{@project.niche}"
+    end
+
+    # 3. Headings (if available - only for non-SPA sites)
     if domain_data[:h1s]&.any?
-      context_parts << domain_data[:h1s].first(3).join(". ")
+      context_parts << "Main topics: #{domain_data[:h1s].first(3).join(', ')}"
     end
     if domain_data[:h2s]&.any?
-      context_parts << domain_data[:h2s].first(5).join(". ")
+      context_parts << "Content areas: #{domain_data[:h2s].first(5).join(', ')}"
     end
 
-    # 3. Sitemap keywords (good signal for SPA sites)
+    # 4. Sitemap keywords (good signal for SPA sites)
     if domain_data[:sitemap_keywords]&.any?
-      context_parts << "Topics: #{domain_data[:sitemap_keywords].first(10).join(', ')}"
+      context_parts << "Site sections: #{domain_data[:sitemap_keywords].first(10).join(', ')}"
     end
 
-    # 4. Seed keywords (if available - they're already validated as relevant)
+    # 5. Seed keywords (CRITICAL - these define the semantic space)
     if @keyword_research&.seed_keywords&.any?
-      context_parts << "Related keywords: #{@keyword_research.seed_keywords.first(10).join(', ')}"
+      # Include ALL seed keywords, not just first 10 - they're the ground truth
+      context_parts << "Target keywords: #{@keyword_research.seed_keywords.join(', ')}"
     end
 
-    # 5. Project metadata as fallback
-    if context_parts.empty?
-      Rails.logger.warn "No context from domain scraping, using project metadata"
+    # 6. Add explicit negative examples to help filter out junk
+    context_parts << "NOT about: software bugs, technical errors, unrelated business tools, generic AI tools, location-specific services"
+
+    # 7. Add explicit use cases / customer journey
+    context_parts << "Users search for: idea validation, startup validation, business concept testing, market research, feasibility analysis"
+
+    # 8. Project metadata as fallback
+    if context_parts.size < 3
+      Rails.logger.warn "Limited context available, adding fallback metadata"
       context_parts << @project.name
-      context_parts << @project.niche
-      context_parts << @project.description if @project.description.present?
+      context_parts << @project.niche if @project.niche.present?
     end
 
     context = context_parts.compact.join(". ")
-    Rails.logger.info "Built domain context (#{context.length} chars): #{context.first(150)}..."
+    Rails.logger.info "Built domain context (#{context.length} chars): #{context.first(200)}..."
     context
   end
 
