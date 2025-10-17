@@ -4,6 +4,7 @@ class SemanticSimilarityService
   EMBEDDING_MODEL = "text-embedding-3-small" # Cheaper, faster, good enough for filtering
   EMBEDDING_DIMENSIONS = 1536 # Default dimension for text-embedding-3-small
   OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings"
+  MAX_BATCH_SIZE = 2000 # OpenAI limit is 2048, leave buffer
 
   def initialize
     @api_key = ENV['OPENAI_API_KEY']
@@ -21,15 +22,41 @@ class SemanticSimilarityService
   def batch_similarity(base_text, keywords)
     return [] if keywords.empty?
 
-    all_texts = [base_text] + keywords
-    embeddings = get_embeddings(all_texts)
-    base_embedding = embeddings[0]
+    # OpenAI has a limit of 2048 inputs per request
+    # So we need to batch if we have more than 2047 keywords (+ 1 for base_text)
+    if keywords.size <= MAX_BATCH_SIZE
+      # Small enough to do in one request
+      all_texts = [base_text] + keywords
+      embeddings = get_embeddings(all_texts)
+      base_embedding = embeddings[0]
 
-    keywords.each_with_index.map do |keyword, i|
-      {
-        keyword: keyword,
-        similarity: cosine_similarity(base_embedding, embeddings[i + 1])
-      }
+      keywords.each_with_index.map do |keyword, i|
+        {
+          keyword: keyword,
+          similarity: cosine_similarity(base_embedding, embeddings[i + 1])
+        }
+      end
+    else
+      # Too many keywords - need to batch
+      Rails.logger.info "Batching #{keywords.size} keywords into chunks of #{MAX_BATCH_SIZE}"
+
+      # Get base embedding once
+      base_embedding = get_embeddings([base_text])[0]
+
+      # Process keywords in batches
+      results = []
+      keywords.each_slice(MAX_BATCH_SIZE) do |batch|
+        batch_embeddings = get_embeddings(batch)
+
+        batch.each_with_index do |keyword, i|
+          results << {
+            keyword: keyword,
+            similarity: cosine_similarity(base_embedding, batch_embeddings[i])
+          }
+        end
+      end
+
+      results
     end
   end
 
@@ -85,8 +112,18 @@ class SemanticSimilarityService
     data["data"].map { |d| d["embedding"] }
 
   rescue => e
-    Rails.logger.error "OpenAI Embeddings API error: #{e.message}"
-    Rails.logger.error e.backtrace.first(5).join("\n")
+    Rails.logger.error "=" * 100
+    Rails.logger.error "CRITICAL: OpenAI Embeddings API FAILED"
+    Rails.logger.error "=" * 100
+    Rails.logger.error "Error: #{e.class} - #{e.message}"
+    Rails.logger.error "Texts count: #{texts.size}"
+    Rails.logger.error "First text (#{texts.first.to_s.length} chars): #{texts.first.to_s[0..200]}"
+    Rails.logger.error "Backtrace:"
+    Rails.logger.error e.backtrace.first(10).join("\n")
+    Rails.logger.error "=" * 100
+    Rails.logger.error "RETURNING ZERO VECTORS - ALL SIMILARITIES WILL BE 0.0"
+    Rails.logger.error "=" * 100
+
     # Return zero vectors as fallback (will have 0 similarity)
     Array.new(texts.size) { Array.new(EMBEDDING_DIMENSIONS, 0.0) }
   end
