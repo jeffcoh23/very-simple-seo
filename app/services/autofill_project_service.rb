@@ -82,13 +82,12 @@ class AutofillProjectService
         }
       end.compact.uniq { |c| c[:domain] }
 
-      Rails.logger.info "Found #{candidate_domains.size} candidate competitors, filtering with AI..."
+      Rails.logger.info "Found #{candidate_domains.size} candidate competitors"
 
-      # Use AI to intelligently filter competitors
-      competitor_domains = filter_competitors_with_ai(candidate_domains, domain_data)
-
-      Rails.logger.info "Detected #{competitor_domains.size} likely competitors for user curation"
-      competitor_domains
+      # Skip AI filtering - let users manually curate instead
+      # This gives them more options and reduces false negatives
+      Rails.logger.info "Returning all #{candidate_domains.size} competitors for user curation"
+      candidate_domains  # Return all - users can manually remove unwanted ones
     rescue => e
       Rails.logger.error "Competitor detection failed: #{e.message}"
       Rails.logger.error e.backtrace.first(3).join("\n")
@@ -199,7 +198,8 @@ class AutofillProjectService
       competitors: competitor_domains
     )
 
-    generator.generate
+    # Use the new method that accepts competitor domains directly
+    generator.generate_with_competitors(competitor_domains)
   end
 
   def fallback_seeds(domain_data)

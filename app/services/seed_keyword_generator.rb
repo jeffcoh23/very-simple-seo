@@ -36,106 +36,105 @@ class SeedKeywordGenerator
     seeds
   end
 
-  # Legacy method for backward compatibility (autofill, etc.)
-  def generate
-    Rails.logger.info "Generating seed keywords with Grounding for: #{@domain}"
-    Rails.logger.info "API call budget: 3 Grounding calls max"
-
-    # Step 1: Scrape YOUR domain
-    domain_data = @project&.domain_analysis || scrape_domain
-
-    # Step 2: Discover competitors via Grounding (if none manually added)
-    competitor_domains = discover_competitors_via_grounding
-    @api_calls_used += 1
-    Rails.logger.info "  Discovered #{competitor_domains.size} competitors (API calls: #{@api_calls_used})"
-
-    # Step 3: Scrape competitors
-    competitor_data = scrape_competitors(competitor_domains)
-    Rails.logger.info "  Scraped #{competitor_data.size} competitors"
-
-    # Step 4: Generate seed keywords via Grounding based on YOUR domain + competitor data
-    seeds = generate_seeds_via_grounding(domain_data, competitor_data)
-    @api_calls_used += 1
-    Rails.logger.info "  Generated #{seeds.size} seeds from Grounding (API calls: #{@api_calls_used})"
-
-    Rails.logger.info "Total API calls used: #{@api_calls_used}"
-    seeds
-  end
+  # DEPRECATED: Old scraping-based method - use generate_with_competitors instead
+  # def generate
+  #   Rails.logger.info "Generating seed keywords with Grounding for: #{@domain}"
+  #   Rails.logger.info "API call budget: 3 Grounding calls max"
+  #
+  #   # Step 1: Scrape YOUR domain
+  #   domain_data = @project&.domain_analysis || scrape_domain
+  #
+  #   # Step 2: Discover competitors via Grounding (if none manually added)
+  #   competitor_domains = discover_competitors_via_grounding
+  #   @api_calls_used += 1
+  #   Rails.logger.info "  Discovered #{competitor_domains.size} competitors (API calls: #{@api_calls_used})"
+  #
+  #   # Step 3: Scrape competitors
+  #   competitor_data = scrape_competitors(competitor_domains)
+  #   Rails.logger.info "  Scraped #{competitor_data.size} competitors"
+  #
+  #   # Step 4: Generate seed keywords via Grounding based on YOUR domain + competitor data
+  #   seeds = generate_seeds_via_grounding(domain_data, competitor_data)
+  #   @api_calls_used += 1
+  #   Rails.logger.info "  Generated #{seeds.size} seeds from Grounding (API calls: #{@api_calls_used})"
+  #
+  #   Rails.logger.info "Total API calls used: #{@api_calls_used}"
+  #   seeds
+  # end
 
   private
 
-  def scrape_domain
-    Rails.logger.info "Scraping YOUR domain for content analysis..."
-    service = DomainAnalysisService.new(@domain)
-    domain_data = service.analyze
-
-    # Store it on project for future use (if we have a project)
-    @project&.update(domain_analysis: domain_data) if domain_data && !domain_data[:error]
-
-    domain_data
-  end
-
-  # Step 2: Discover competitors via Grounding
-  def discover_competitors_via_grounding
-    # If user manually added competitors, use those
-    return @competitors if @competitors.any?
-
-    query = "Find the top 10 direct competitor domains for #{@domain} in the #{@niche} space"
-
-    json_structure = [
-      "competitor1.com",
-      "competitor2.com",
-      "competitor3.com"
-    ].to_json
-
-    result = @grounding.search_json(query, json_structure_hint: json_structure)
-
-    unless result[:success]
-      Rails.logger.warn "Competitor discovery failed: #{result[:error]}"
-      return []
-    end
-
-    # Parse competitor domains from JSON response
-    competitors = result[:data]
-
-    # Handle different response formats
-    competitors = case competitors
-    when Array
-      competitors.map { |c| normalize_competitor(c) }
-    when Hash
-      (competitors["competitors"] || competitors["domains"] || []).map { |c| normalize_competitor(c) }
-    else
-      []
-    end
-
-    competitors.compact.uniq.first(10)
-  rescue => e
-    Rails.logger.error "Competitor discovery error: #{e.message}"
-    []
-  end
-
-  # Step 3: Scrape competitors
-  def scrape_competitors(competitor_domains)
-    return [] if competitor_domains.empty?
-
-    Rails.logger.info "Scraping #{competitor_domains.size} competitors..."
-
-    competitor_data = []
-
-    competitor_domains.first(10).each do |competitor_domain|
-      Rails.logger.info "  Scraping #{competitor_domain}..."
-      service = DomainAnalysisService.new(competitor_domain)
-      data = service.analyze
-
-      if data && !data[:error]
-        competitor_data << data
-      end
-
-      sleep 1 # Be nice to servers
-    end
-
-    competitor_data
-  end
+  # DEPRECATED: Old scraping methods - no longer needed with Grounding
+  # def scrape_domain
+  #   Rails.logger.info "Scraping YOUR domain for content analysis..."
+  #   service = DomainAnalysisService.new(@domain)
+  #   domain_data = service.analyze
+  #
+  #   # Store it on project for future use (if we have a project)
+  #   @project&.update(domain_analysis: domain_data) if domain_data && !domain_data[:error]
+  #
+  #   domain_data
+  # end
+  #
+  # def discover_competitors_via_grounding
+  #   # If user manually added competitors, use those
+  #   return @competitors if @competitors.any?
+  #
+  #   query = "Find the top 10 direct competitor domains for #{@domain} in the #{@niche} space"
+  #
+  #   json_structure = [
+  #     "competitor1.com",
+  #     "competitor2.com",
+  #     "competitor3.com"
+  #   ].to_json
+  #
+  #   result = @grounding.search_json(query, json_structure_hint: json_structure)
+  #
+  #   unless result[:success]
+  #     Rails.logger.warn "Competitor discovery failed: #{result[:error]}"
+  #     return []
+  #   end
+  #
+  #   # Parse competitor domains from JSON response
+  #   competitors = result[:data]
+  #
+  #   # Handle different response formats
+  #   competitors = case competitors
+  #   when Array
+  #     competitors.map { |c| normalize_competitor(c) }
+  #   when Hash
+  #     (competitors["competitors"] || competitors["domains"] || []).map { |c| normalize_competitor(c) }
+  #   else
+  #     []
+  #   end
+  #
+  #   competitors.compact.uniq.first(10)
+  # rescue => e
+  #   Rails.logger.error "Competitor discovery error: #{e.message}"
+  #   []
+  # end
+  #
+  # def scrape_competitors(competitor_domains)
+  #   return [] if competitor_domains.empty?
+  #
+  #   Rails.logger.info "Scraping #{competitor_domains.size} competitors..."
+  #
+  #   competitor_data = []
+  #
+  #   competitor_domains.first(10).each do |competitor_domain|
+  #     Rails.logger.info "  Scraping #{competitor_domain}..."
+  #     service = DomainAnalysisService.new(competitor_domain)
+  #     data = service.analyze
+  #
+  #     if data && !data[:error]
+  #       competitor_data << data
+  #     end
+  #
+  #     sleep 1 # Be nice to servers
+  #   end
+  #
+  #   competitor_data
+  # end
 
   # Generate seeds via Grounding - let it research the domain + competitors
   def generate_seeds_via_grounding(competitor_domains)
