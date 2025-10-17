@@ -452,13 +452,7 @@ class KeywordResearchService
       context_parts << "Target keywords: #{@keyword_research.seed_keywords.join(', ')}"
     end
 
-    # 6. Add explicit negative examples to help filter out junk
-    context_parts << "NOT about: software bugs, technical errors, unrelated business tools, generic AI tools, location-specific services"
-
-    # 7. Add explicit use cases / customer journey
-    context_parts << "Users search for: idea validation, startup validation, business concept testing, market research, feasibility analysis"
-
-    # 8. Project metadata as fallback
+    # 6. Project metadata as fallback
     if context_parts.size < 3
       Rails.logger.warn "Limited context available, adding fallback metadata"
       context_parts << @project.name
