@@ -136,8 +136,12 @@ class KeywordResearchService
       seeds = @project.seed_keywords
     else
       Rails.logger.info "Generating seed keywords from domain + competitor insights..."
+
+      # Extract competitor domains (not scraped data)
+      competitor_domains = @competitor_data.map { |c| c[:url] || c[:domain] }.compact rescue []
+
       generator = SeedKeywordGenerator.new(@project)
-      seeds = generator.generate_with_competitors(@competitor_data || [])
+      seeds = generator.generate_with_competitors(competitor_domains)
     end
 
     # Store seeds in keyword_research record

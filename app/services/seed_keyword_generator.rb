@@ -21,16 +21,14 @@ class SeedKeywordGenerator
     @api_calls_used = 0
   end
 
-  # New method: accepts pre-scraped competitor data (from service)
-  def generate_with_competitors(competitor_data)
+  # New method: accepts competitor DOMAINS (not scraped data)
+  # Grounding will research them directly
+  def generate_with_competitors(competitor_domains)
     Rails.logger.info "Generating seed keywords with Grounding for: #{@domain}"
-    Rails.logger.info "Using #{competitor_data.size} pre-scraped competitors"
+    Rails.logger.info "Using #{competitor_domains.size} competitor domains for context"
 
-    # Step 1: Get YOUR domain data (should be cached by service)
-    domain_data = @project&.domain_analysis || scrape_domain
-
-    # Step 2: Generate seeds via Grounding using YOUR domain + competitor data
-    seeds = generate_seeds_via_grounding(domain_data, competitor_data)
+    # Generate seeds via Grounding (it will analyze domain + competitors)
+    seeds = generate_seeds_via_grounding(competitor_domains)
     @api_calls_used += 1
     Rails.logger.info "  Generated #{seeds.size} seeds from Grounding (API calls: #{@api_calls_used})"
 
@@ -139,64 +137,60 @@ class SeedKeywordGenerator
     competitor_data
   end
 
-  # Step 4: Generate seeds via Grounding based on YOUR domain + competitor data
-  def generate_seeds_via_grounding(domain_data, competitor_data)
-    # Build context from YOUR domain
-    your_context = <<~CONTEXT
-      YOUR DOMAIN: #{@domain}
-      Title: #{domain_data[:title]}
-      Description: #{domain_data[:meta_description]}
-      Main Headings: #{domain_data[:h1s]&.first(3)&.join(', ')}
-      Content Topics: #{domain_data[:h2s]&.first(5)&.join(', ')}
-      Niche: #{@niche}
-    CONTEXT
+  # Generate seeds via Grounding - let it research the domain + competitors
+  def generate_seeds_via_grounding(competitor_domains)
+    # Clean the description (same fix as competitor discovery)
+    raw_description = if @project
+      @project.description.presence || "#{@project.name} - #{@niche}"
+    else
+      @niche || "Unknown business"
+    end
 
-    # Build context from competitor data
-    competitor_context = ""
-    if competitor_data.any?
-      competitor_context = "\n\nCOMPETITOR ANALYSIS:\n"
-      competitor_data.each_with_index do |comp_data, index|
-        competitor_context += "Competitor #{index + 1}: #{comp_data[:title]}\n"
-        competitor_context += "Topics: #{comp_data[:h1s]&.first(5)&.join(', ')}\n\n"
-      end
+    description = if raw_description.include?("Description:")
+      raw_description.split("Description:").last.strip
+    else
+      raw_description
+    end
+
+    # Build competitor list for Grounding to research
+    competitor_list = if competitor_domains.any?
+      competitor_domains.first(10).map { |d| "- https://#{d}" }.join("\n")
+    else
+      "(No competitors provided - analyze the main domain only)"
     end
 
     query = <<~QUERY
-      #{your_context}
-      #{competitor_context}
+      Analyze this business and generate 25 high-quality SEO seed keywords.
 
-      Based on this domain and competitor analysis, generate 40 SEO seed keywords with STRATEGIC DIVERSITY:
+      BUSINESS TO ANALYZE:
+      #{description}
+      Website: #{@domain}
 
-      HIGH-VOLUME BROAD (10-12 keywords, 1-2 words):
-      - Core industry terms that match the domain's actual focus
-      - Product category keywords from the domain content
-      - Broad commercial terms people search for
+      TOP COMPETITORS (for context):
+      #{competitor_list}
 
-      MEDIUM-COMPETITION (12-15 keywords, 2-4 words):
-      - Specific product/service phrases from the domain
-      - Problem-solving keywords based on domain content
-      - Comparison keywords relevant to the niche
+      IMPORTANT: Visit the website and analyze what they ACTUALLY offer.
+      Do NOT generate keywords based only on the domain name.
 
-      LOW-COMPETITION LONG-TAIL (13-15 keywords, 4-6 words):
-      - Full question-based keywords
-      - Tool/template-specific keywords
-      - Very specific use cases from domain content
+      Generate 25 seed keywords that:
+      - Match what the business ACTUALLY does (not just the domain name)
+      - Have clear search intent (what users would actually search for)
+      - Mix broad and specific terms naturally (YOU decide the best mix)
+      - Focus on the core value proposition and target audience
 
-      CRITICAL: Keywords must be RELEVANT to the actual domain content, not generic.
-      Return as a JSON array of keyword strings.
+      Return ONLY a JSON array of keyword strings (no objects, just strings):
+      ["keyword 1", "keyword 2", "keyword 3"]
+
+      No markdown code blocks, just pure JSON.
     QUERY
 
-    json_structure = [
-      "keyword 1",
-      "keyword 2",
-      "keyword 3"
-    ].to_json
+    json_structure = ["keyword 1", "keyword 2", "keyword 3"].to_json
 
     result = @grounding.search_json(query, json_structure_hint: json_structure)
 
     unless result[:success]
-      Rails.logger.warn "Seed generation failed: #{result[:error]}, falling back to OpenAI"
-      return fallback_to_openai(domain_data, competitor_data)
+      Rails.logger.warn "Seed generation failed: #{result[:error]}, using fallback"
+      return fallback_seeds(description)
     end
 
     # Parse keywords from JSON response
@@ -212,10 +206,10 @@ class SeedKeywordGenerator
       []
     end
 
-    keywords.compact.uniq.first(40)
+    keywords.compact.uniq.first(25)
   rescue => e
-    Rails.logger.error "Seed generation error: #{e.message}, falling back to OpenAI"
-    fallback_to_openai(domain_data, competitor_data)
+    Rails.logger.error "Seed generation error: #{e.message}, using fallback"
+    fallback_seeds(description)
   end
 
   # Fallback to OpenAI if Grounding fails
@@ -333,19 +327,31 @@ class SeedKeywordGenerator
     keywords.uniq
   end
 
-  def fallback_seeds(domain_data)
-    Rails.logger.warn "Using fallback seed keywords from domain content"
+  def fallback_seeds(description)
+    Rails.logger.warn "Using fallback: generating basic seeds from description"
 
+    # Extract key terms from description
+    words = description.downcase.split(/\W+/)
+    common_words = %w[the a an and or but for with from about in on at to of is are was were be been being have has had do does did will would could should may might must can]
+    key_terms = words.reject { |w| common_words.include?(w) || w.length < 3 }.uniq
+
+    # Generate basic seed variations
     seeds = []
-    seeds += domain_data[:h1s]&.map(&:downcase) || []
-    seeds += domain_data[:h2s]&.first(10)&.map(&:downcase) || []
-    seeds += domain_data[:sitemap_keywords] || []
+    key_terms.first(5).each do |term|
+      seeds << term
+      seeds << "#{term} tool"
+      seeds << "best #{term}"
+      seeds << "how to #{term}"
+      seeds << "#{term} software"
+    end
 
+    # Add niche-specific seeds if available
     if @niche.present?
+      seeds << @niche
       seeds << "#{@niche} guide"
       seeds << "best #{@niche}"
     end
 
-    seeds.uniq.first(15)
+    seeds.compact.uniq.first(20)
   end
 end
