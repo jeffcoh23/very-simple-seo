@@ -56,7 +56,20 @@ class GoogleGroundingService
 
     begin
       response = @client.ask(prompt)
+
+      # Debug logging
+      Rails.logger.info "GoogleGrounding: Response class: #{response.class}"
+      Rails.logger.info "GoogleGrounding: Response has content? #{response.respond_to?(:content)}"
+
+      # Check if response has content
+      unless response && response.content
+        Rails.logger.error "GoogleGrounding: Empty response from API"
+        Rails.logger.error "GoogleGrounding: Response: #{response.inspect}"
+        return { success: false, error: "Empty response from API" }
+      end
+
       content = response.content.strip
+      Rails.logger.info "GoogleGrounding: Content received (#{content.length} chars)"
 
       # Extract JSON from response (may have markdown code blocks)
       json_content = extract_json_from_response(content)
@@ -75,7 +88,8 @@ class GoogleGroundingService
 
     rescue JSON::ParserError => e
       Rails.logger.error "GoogleGrounding: JSON parse error - #{e.message}"
-      Rails.logger.error "Response content: #{content[0..500]}"
+      Rails.logger.error "Response content (first 1000 chars): #{content[0..1000]}"
+      Rails.logger.error "Response content (last 500 chars): #{content[-500..-1]}"
       { success: false, error: "Invalid JSON response: #{e.message}", raw_content: content }
     rescue RubyLLM::UnauthorizedError => e
       Rails.logger.error "GoogleGrounding: Auth error - #{e.message}"
@@ -152,7 +166,7 @@ class GoogleGroundingService
            .with_params(
              tools: [{ google_search: {} }], # Enable Google Search grounding
              generationConfig: {
-               maxOutputTokens: 2000
+               maxOutputTokens: 8000  # Increased for longer JSON responses
              }
            )
   end

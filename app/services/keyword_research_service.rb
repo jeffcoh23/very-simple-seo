@@ -482,43 +482,67 @@ class KeywordResearchService
 
   # Build rich competitor discovery query for Grounding
   def build_competitor_discovery_query(domain_data)
-    # Extract key info from domain
-    meta_description = domain_data[:meta_description]
     domain = @project.domain.gsub(%r{^https?://}, '').gsub(%r{^www\.}, '').gsub(%r{/$}, '')
 
-    # Use meta description if available, otherwise use project description
-    # Fall back to project name + niche if no description
-    description = meta_description.presence ||
-                  @project.description.presence ||
-                  "#{@project.name} - #{@project.niche}"
+    # Extract clean description from project description field
+    # (May contain "Title: ... Description: ..." format)
+    raw_description = @project.description.presence || "#{@project.name} - #{@project.niche}"
 
-    # Build query - let Grounding figure out what's relevant based on the description
+    # Try to extract just the description part if it's in "Description: X" format
+    description = if raw_description.include?("Description:")
+      raw_description.split("Description:").last.strip
+    else
+      raw_description
+    end
+
+    # Build query - ask for 30 competitors with relevance scores
     <<~QUERY
-      Find the top 10-20 direct competitor websites for this business:
-      "#{description}"
+      Find up to 30 competitor websites for this business:
+      #{description}
 
-      Domain: #{domain}
+      Website: #{@project.domain}
 
-      Find competitors that offer similar services or solve the same problems for the same target audience.
-      Focus on direct competitors that are active and well-known in this space.
+      For each competitor, rate how relevant they are on a scale of 1-10 where:
+      - 10 = Direct competitor offering the exact same service
+      - 7-9 = Very similar service, same target audience
+      - 5-6 = Related service, overlapping audience
 
-      Return ONLY the competitor domain names as a JSON array of strings.
-      Format: ["competitor1.com", "competitor2.com", "competitor3.com"]
+      Return ONLY valid JSON (no markdown, no code blocks) in this exact format:
+      [
+        {
+          "domain": "competitor1.com",
+          "relevance_score": 9,
+          "reason": "Brief reason"
+        }
+      ]
+
+      Keep reasons concise (under 100 characters).
+      Focus on finding competitors you haven't heard of before.
+      Include both well-known and lesser-known competitors.
     QUERY
   end
 
   # Parse competitor domains from Grounding JSON response
+  # Filters to only include competitors with relevance_score >= 5
   def parse_competitor_domains(data)
     competitors = case data
     when Array
-      data.map { |c| normalize_domain(c) }
+      # New format: array of objects with domain, relevance_score, reason
+      if data.first.is_a?(Hash) && data.first.key?("domain")
+        data.select { |c| c["relevance_score"].to_i >= 5 }
+            .sort_by { |c| -c["relevance_score"].to_i }
+            .map { |c| normalize_domain(c["domain"]) }
+      else
+        # Old format: array of strings
+        data.map { |c| normalize_domain(c) }
+      end
     when Hash
       (data["competitors"] || data["domains"] || []).map { |c| normalize_domain(c) }
     else
       []
     end
 
-    competitors.compact.uniq.first(10)
+    competitors.compact.uniq.first(30) # Increased to 30 since we're filtering by score
   end
 
   # Normalize domain format
