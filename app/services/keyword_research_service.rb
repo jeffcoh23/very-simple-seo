@@ -2,7 +2,7 @@
 # Main orchestration service for keyword research
 class KeywordResearchService
   # Thresholds for filtering
-  SIMILARITY_THRESHOLD = 0.20 # Minimum semantic similarity (0-1 scale, lowered to 0.20 to allow more keyword diversity)
+  SIMILARITY_THRESHOLD = 0.40 # Minimum semantic similarity (raised from 0.30 to filter wrong tool categories)
 
   def initialize(keyword_research)
     @keyword_research = keyword_research
@@ -336,8 +336,8 @@ class KeywordResearchService
     # Sort by opportunity score (highest first), treating nil as 0
     sorted = viable_keywords.sort_by { |kw| -(kw[:opportunity] || 0) }
 
-    # Save top 100 (or all if less than 100)
-    top_keywords = sorted.first(100)
+    # Save ALL viable keywords (no cap for now - see full distribution)
+    top_keywords = sorted
 
     top_keywords.each do |kw_data|
       @keyword_research.keywords.create!(
