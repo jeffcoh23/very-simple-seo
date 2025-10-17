@@ -502,10 +502,14 @@ class KeywordResearchService
 
       Website: #{@project.domain}
 
+      IMPORTANT: Only include websites where this service is their PRIMARY FOCUS or a CORE OFFERING.
+      Do NOT include sites that only have this as a minor side feature or hidden tool.
+
       For each competitor, rate how relevant they are on a scale of 1-10 where:
-      - 10 = Direct competitor offering the exact same service
-      - 7-9 = Very similar service, same target audience
-      - 5-6 = Related service, overlapping audience
+      - 10 = Direct competitor, this is their main product/service
+      - 7-9 = Very similar service, prominently featured on their site
+      - 5-6 = Related service, but clearly part of their core offering
+      - Below 5 = Don't include (side feature, not core focus)
 
       Return ONLY valid JSON (no markdown, no code blocks) in this exact format:
       [
@@ -523,13 +527,13 @@ class KeywordResearchService
   end
 
   # Parse competitor domains from Grounding JSON response
-  # Filters to only include competitors with relevance_score >= 5
+  # Filters to only include competitors with relevance_score >= 7 (strict filtering for primary focus)
   def parse_competitor_domains(data)
     competitors = case data
     when Array
       # New format: array of objects with domain, relevance_score, reason
       if data.first.is_a?(Hash) && data.first.key?("domain")
-        data.select { |c| c["relevance_score"].to_i >= 5 }
+        data.select { |c| c["relevance_score"].to_i >= 7 }
             .sort_by { |c| -c["relevance_score"].to_i }
             .map { |c| normalize_domain(c["domain"]) }
       else
