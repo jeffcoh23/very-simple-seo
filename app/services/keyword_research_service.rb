@@ -2,7 +2,7 @@
 # Main orchestration service for keyword research
 class KeywordResearchService
   # Thresholds for filtering
-  SIMILARITY_THRESHOLD = 0.30 # Minimum semantic similarity (0-1 scale, tuned to 0.30 for balance)
+  SIMILARITY_THRESHOLD = 0.20 # Minimum semantic similarity (0-1 scale, lowered to 0.20 to allow more keyword diversity)
 
   def initialize(keyword_research)
     @keyword_research = keyword_research
@@ -475,21 +475,34 @@ class KeywordResearchService
 
     # Build query - ask for 30 competitors with relevance scores
     <<~QUERY
-      Find up to 30 competitor websites for this business:
+      I need COMPETING PRODUCTS/SERVICES (not articles or blogs) for:
       #{description}
 
-      Website: #{@project.domain}
+      My website: #{@project.domain}
 
-      IMPORTANT: Only include websites where this service is their PRIMARY FOCUS or a CORE OFFERING.
-      Do NOT include sites that only have this as a minor side feature or hidden tool.
+      SEARCH FOR: Other software tools, apps, or services that do the same thing.
 
-      For each competitor, rate how relevant they are on a scale of 1-10 where:
-      - 10 = Direct competitor, this is their main product/service
-      - 7-9 = Very similar service, prominently featured on their site
-      - 5-6 = Related service, but clearly part of their core offering
-      - Below 5 = Don't include (side feature, not core focus)
+      DO NOT INCLUDE:
+      - Blog posts or articles ABOUT this topic (medium.com, facebook.com, etc.)
+      - News sites or content platforms
+      - Tutorial or how-to sites
+      - General business directories
 
-      Return ONLY valid JSON (no markdown, no code blocks) in this exact format:
+      ONLY INCLUDE:
+      - Actual competing software/SaaS tools
+      - Direct competitors where this is their MAIN product
+      - Alternative tools/services users would choose instead of #{domain}
+
+      Examples of GOOD results: "competitor-tool.com", "alternative-app.io"
+      Examples of BAD results: "medium.com/article", "techcrunch.com/review"
+
+      For each competitor, rate relevance 1-10:
+      - 10 = Direct competitor, exact same service
+      - 7-9 = Very similar service, same target market
+      - 5-6 = Related service, different approach
+      - Below 5 = Don't include
+
+      Return ONLY valid JSON (no markdown):
       [
         {
           "domain": "competitor1.com",
@@ -498,9 +511,7 @@ class KeywordResearchService
         }
       ]
 
-      Keep reasons concise (under 100 characters).
-      Focus on finding competitors you haven't heard of before.
-      Include both well-known and lesser-known competitors.
+      Focus on finding actual competing tools, not content about the topic.
     QUERY
   end
 
