@@ -23,12 +23,12 @@ class SeedKeywordGenerator
 
   # New method: accepts competitor DOMAINS (not scraped data)
   # Grounding will research them directly
-  def generate_with_competitors(competitor_domains)
+  def generate_with_competitors(competitor_domains, domain_title: nil, domain_description: nil)
     Rails.logger.info "Generating seed keywords with Grounding for: #{@domain}"
     Rails.logger.info "Using #{competitor_domains.size} competitor domains for context"
 
     # Generate seeds via Grounding (it will analyze domain + competitors)
-    seeds = generate_seeds_via_grounding(competitor_domains)
+    seeds = generate_seeds_via_grounding(competitor_domains, domain_title: domain_title, domain_description: domain_description)
     @api_calls_used += 1
     Rails.logger.info "  Generated #{seeds.size} seeds from Grounding (API calls: #{@api_calls_used})"
 
@@ -137,23 +137,31 @@ class SeedKeywordGenerator
   # end
 
   # Generate seeds via Grounding - let it research the domain + competitors
-  def generate_seeds_via_grounding(competitor_domains)
-    # Clean the description (same fix as competitor discovery)
-    raw_description = if @project
-      @project.description.presence || "#{@project.name} - #{@niche}"
+  def generate_seeds_via_grounding(competitor_domains, domain_title: nil, domain_description: nil)
+    # Use actual domain data if provided (from autofill), otherwise use project data
+    if domain_title || domain_description
+      title = domain_title || @domain
+      description = domain_description || "Business website"
     else
-      @niche || "Unknown business"
-    end
+      # Fallback to project data
+      raw_description = if @project
+        @project.description.presence || "#{@project.name} - #{@niche}"
+      else
+        @niche || "Unknown business"
+      end
 
-    description = if raw_description.include?("Description:")
-      raw_description.split("Description:").last.strip
-    else
-      raw_description
+      description = if raw_description.include?("Description:")
+        raw_description.split("Description:").last.strip
+      else
+        raw_description
+      end
+
+      title = @project&.name || @domain
     end
 
     # Build competitor list for Grounding to research
     competitor_list = if competitor_domains.any?
-      competitor_domains.first(10).map { |d| "- https://#{d}" }.join("\n")
+      competitor_domains.first(10).map { |d| "- #{d}" }.join("\n")
     else
       "(No competitors provided - analyze the main domain only)"
     end
@@ -162,26 +170,28 @@ class SeedKeywordGenerator
       Analyze this business and generate 20 high-quality SEO seed keywords.
 
       BUSINESS TO ANALYZE:
-      #{description}
+      Title: #{title}
+      Description: #{description}
       Website: #{@domain}
 
       TOP COMPETITORS (for context):
       #{competitor_list}
 
-      IMPORTANT: Visit the website and analyze what they ACTUALLY offer.
-      Do NOT generate keywords based only on the domain name.
+      CRITICAL: The title and description above tell you EXACTLY what this business does.
+      Generate keywords for THAT specific business only.
+      Do NOT be misled by the domain name - use the title/description to understand their actual service.
 
       Generate 20 seed keywords that:
-      - Match EXACTLY what this business does (their specific use case)
+      - Match EXACTLY what this business does (based on title/description above)
       - Have clear search intent (what users would actually search for)
       - Are specific to this tool's category (not generic adjacent categories)
       - Focus on the core value proposition and target audience
 
       AVOID generating keywords for:
-      - Adjacent but different tools (e.g., if this is idea validation, don't include business plan keywords)
+      - Services NOT mentioned in the title/description
+      - Adjacent but different tools
       - Generic categories that are too broad
       - Features this tool doesn't have
-      - Unrelated AI tools just because this uses AI
 
       QUALITY RULES:
       - Each keyword should be something a user would search when looking for THIS specific type of tool

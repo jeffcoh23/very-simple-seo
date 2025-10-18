@@ -165,7 +165,11 @@ class AutofillProjectService
       competitors: competitor_domains
     )
 
-    # Use the new method that accepts competitor domains directly
-    generator.generate_with_competitors(competitor_domains)
+    # Pass domain title and description to prevent domain name confusion
+    generator.generate_with_competitors(
+      competitor_domains,
+      domain_title: domain_data[:title],
+      domain_description: domain_data[:meta_description]
+    )
   end
 end
