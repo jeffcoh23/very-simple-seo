@@ -45,6 +45,28 @@ class ArticleOutlineService
       "- #{stat['stat']} (#{stat['source']})"
     }.join("\n")
 
+    # NEW: Get FAQs, People Also Ask, and internal linking data
+    faqs = @serp_data['faqs'] || []
+    people_also_ask = @serp_data['people_also_ask'] || []
+    internal_links = @serp_data['internal_link_opportunities'] || []
+    cta_placements = @serp_data['cta_placements'] || []
+
+    faqs_preview = faqs.take(5).map { |faq|
+      "- Q: #{faq['question']}\n  A: #{faq['answer'][0..100]}..."
+    }.join("\n")
+
+    paa_preview = people_also_ask.take(3).map { |paa|
+      "- #{paa['question']} (suggest as H2: #{paa['should_be_h2_section']})"
+    }.join("\n")
+
+    internal_links_preview = internal_links.take(3).map { |link|
+      "- Link to: \"#{link['target_article_title']}\" (#{link['placement']})"
+    }.join("\n")
+
+    cta_preview = cta_placements.take(2).map { |cta|
+      "- \"#{cta['cta_text']}\" → #{cta['placement']}"
+    }.join("\n")
+
     prompt = <<~PROMPT
       You are an expert SEO content strategist creating article outlines.
 
@@ -62,6 +84,18 @@ class ArticleOutlineService
       AVAILABLE STATISTICS:
       #{stats_preview.presence || "No statistics available"}
 
+      AVAILABLE FAQs (for FAQ section):
+      #{faqs_preview.presence || "No FAQs available"}
+
+      PEOPLE ALSO ASK (consider as H2 sections):
+      #{paa_preview.presence || "No PAA questions available"}
+
+      INTERNAL LINK OPPORTUNITIES (to existing articles):
+      #{internal_links_preview.presence || "No internal links available"}
+
+      CTA PLACEMENTS (project CTAs to include):
+      #{cta_preview.presence || "No CTAs available"}
+
       #{voice_profile_instructions}
 
       Create a comprehensive, SEO-optimized outline that:
@@ -72,6 +106,9 @@ class ArticleOutlineService
       5. Has 6-10 main sections (H2 headings)
       6. Each section has 2-4 subsections (H3 headings)
       7. Includes strategic tool placements where interactive elements would add value
+      8. INCLUDES A DEDICATED FAQ SECTION (H2) near the end with 8-12 questions
+      9. Plans internal link placements in relevant sections
+      10. Plans CTA placements at strategic points (not all at once)
 
       TOOL PLACEMENT GUIDELINES:
       - Calculator: for financial/ROI calculations
@@ -85,6 +122,8 @@ class ArticleOutlineService
         "title": "SEO-optimized title with keyword (50-60 chars)",
         "meta_description": "Compelling meta description with keyword (150-160 chars)",
         "target_word_count": #{target_word_count},
+        "has_faq_section": true,
+        "faq_section_index": 7,
         "sections": [
           {
             "heading": "Section heading (H2)",
@@ -96,9 +135,24 @@ class ArticleOutlineService
                 "word_count": 200,
                 "key_points": ["specific point 1", "specific point 2"]
               }
+            ],
+            "internal_links": [
+              {
+                "anchor_text": "customer interview best practices",
+                "target_article_title": "How to Conduct Interviews",
+                "context": "Mention in subsection about validation methods"
+              }
             ]
           }
         ],
+        "faq_section": {
+          "heading": "Frequently Asked Questions",
+          "word_count": 600,
+          "questions_to_include": [
+            "How many customer interviews do I need?",
+            "What's the difference between validation and research?"
+          ]
+        },
         "tool_placements": [
           {
             "type": "calculator",
@@ -106,16 +160,28 @@ class ArticleOutlineService
             "placement": "after_section_2",
             "purpose": "Help readers calculate their potential ROI"
           }
+        ],
+        "cta_placements": [
+          {
+            "cta_text": "Start Your Free Trial",
+            "cta_url": "https://example.com/signup",
+            "placement": "after_section_3",
+            "context": "After explaining process, offer tool to help"
+          }
         ]
       }
 
       IMPORTANT:
       - Make the outline comprehensive enough to reach #{target_word_count} words
       - Include an Introduction section (200-300 words)
+      - Include a FAQ section near the end (before Conclusion)
       - Include a Conclusion section (200-300 words)
       - Distribute word count evenly across sections
       - Use specific, actionable section headings
       - Reference the real examples and stats provided above in your key_points
+      - Plan internal link placements in sections where they're contextually relevant
+      - Space out CTA placements (don't put them all in one place)
+      - Consider People Also Ask questions as potential H2 section topics
     PROMPT
 
     client = Ai::ClientService.for_outline_generation
@@ -140,6 +206,9 @@ class ArticleOutlineService
       Rails.logger.error "Invalid outline: insufficient sections"
       return nil
     end
+
+    # Ensure has_faq_section is set (for backward compatibility with old outlines)
+    outline['has_faq_section'] ||= outline.key?('faq_section')
 
     outline
   rescue JSON::ParserError => e

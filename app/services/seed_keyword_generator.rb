@@ -159,7 +159,7 @@ class SeedKeywordGenerator
     end
 
     query = <<~QUERY
-      Analyze this business and generate 25 high-quality SEO seed keywords.
+      Analyze this business and generate 20 high-quality SEO seed keywords.
 
       BUSINESS TO ANALYZE:
       #{description}
@@ -171,11 +171,22 @@ class SeedKeywordGenerator
       IMPORTANT: Visit the website and analyze what they ACTUALLY offer.
       Do NOT generate keywords based only on the domain name.
 
-      Generate 25 seed keywords that:
-      - Match what the business ACTUALLY does (not just the domain name)
+      Generate 20 seed keywords that:
+      - Match EXACTLY what this business does (their specific use case)
       - Have clear search intent (what users would actually search for)
-      - Mix broad and specific terms naturally (YOU decide the best mix)
+      - Are specific to this tool's category (not generic adjacent categories)
       - Focus on the core value proposition and target audience
+
+      AVOID generating keywords for:
+      - Adjacent but different tools (e.g., if this is idea validation, don't include business plan keywords)
+      - Generic categories that are too broad
+      - Features this tool doesn't have
+      - Unrelated AI tools just because this uses AI
+
+      QUALITY RULES:
+      - Each keyword should be something a user would search when looking for THIS specific type of tool
+      - Prefer specific over generic (e.g., "startup idea validation tool" > "business tools")
+      - Include the main category/use case in most keywords
 
       Return ONLY a JSON array of keyword strings (no objects, just strings):
       ["keyword 1", "keyword 2", "keyword 3"]
@@ -205,7 +216,7 @@ class SeedKeywordGenerator
       []
     end
 
-    keywords.compact.uniq.first(25)
+    keywords.compact.uniq.first(20)
   rescue => e
     Rails.logger.error "Seed generation error: #{e.message}, using fallback"
     fallback_seeds(description)
@@ -327,7 +338,17 @@ class SeedKeywordGenerator
   end
 
   def fallback_seeds(description)
-    Rails.logger.warn "Using fallback: generating basic seeds from description"
+    Rails.logger.warn "Using fallback: generating basic seeds from description/domain"
+
+    seeds = []
+
+    # If description is empty, try to extract from domain name
+    if description.blank? || description.strip.empty?
+      Rails.logger.warn "Description is empty, using domain name for fallback"
+      domain_name = extract_domain_name_from_url(@domain)
+      description = "#{domain_name} #{@niche}" if @niche.present?
+      description = domain_name if description.blank?
+    end
 
     # Extract key terms from description
     words = description.downcase.split(/\W+/)
@@ -335,7 +356,6 @@ class SeedKeywordGenerator
     key_terms = words.reject { |w| common_words.include?(w) || w.length < 3 }.uniq
 
     # Generate basic seed variations
-    seeds = []
     key_terms.first(5).each do |term|
       seeds << term
       seeds << "#{term} tool"
@@ -351,6 +371,24 @@ class SeedKeywordGenerator
       seeds << "best #{@niche}"
     end
 
+    # Add domain-based seeds as absolute fallback
+    domain_name = extract_domain_name_from_url(@domain)
+    if domain_name.present?
+      seeds << domain_name
+      seeds << "#{domain_name} alternative"
+      seeds << "#{domain_name} review"
+    end
+
+    Rails.logger.info "Fallback generated #{seeds.compact.uniq.size} seeds"
     seeds.compact.uniq.first(20)
+  end
+
+  def extract_domain_name_from_url(url)
+    # Extract domain name from URL (e.g., "signallab" from "https://signallab.app")
+    uri = URI.parse(url)
+    host = uri.host.gsub(/^www\./, '')
+    host.split('.').first
+  rescue
+    "tool"
   end
 end

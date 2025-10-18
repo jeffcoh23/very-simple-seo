@@ -1,13 +1,13 @@
 # app/services/google_grounding_service.rb
-# Wrapper around ruby_llm with Gemini + Google Search grounding
-# Uses Gemini 2.5 Flash with google_search tool for real-time web search
+# Wrapper for grounded search using different AI providers
+# Supports: Gemini (google_search), Perplexity (web search), OpenAI (future)
 
 class GoogleGroundingService
-  # Use Gemini 2.5 Flash (fast and supports grounding)
-  MODEL = "gemini-2.5-flash".freeze
-  PROVIDER = "gemini".freeze
+  # Default to Gemini for grounding
+  DEFAULT_PROVIDER = :gemini_grounding
 
-  def initialize
+  def initialize(provider: DEFAULT_PROVIDER)
+    @provider = provider
     @client = build_client
   end
 
@@ -15,34 +15,22 @@ class GoogleGroundingService
   # @param query [String] The search query
   # @param max_tokens [Integer] Maximum response tokens
   # @return [Hash] { success: boolean, content: string, grounding_metadata: hash, error: string }
-  def search(query, max_tokens: 2000)
-    Rails.logger.info "GoogleGrounding: Searching '#{query}'"
+  def search(query, max_tokens: 8000)
+    Rails.logger.info "GoogleGrounding: Searching '#{query[0..50]}...' (provider: #{@provider})"
 
-    begin
-      response = @client.ask(query)
-
-      # Extract content and metadata
-      result = {
-        success: true,
-        content: response.content,
-        grounding_metadata: extract_grounding_metadata(response),
-        raw_response: response
-      }
-
-      Rails.logger.info "GoogleGrounding: Search successful (#{result[:grounding_metadata][:sources_count]} sources)"
-      result
-
-    rescue RubyLLM::UnauthorizedError => e
-      Rails.logger.error "GoogleGrounding: Auth error - #{e.message}"
-      { success: false, error: "Authentication failed: #{e.message}" }
-    rescue RubyLLM::RateLimitError => e
-      Rails.logger.warn "GoogleGrounding: Rate limit - #{e.message}"
-      { success: false, error: "Rate limit exceeded: #{e.message}" }
-    rescue => e
-      Rails.logger.error "GoogleGrounding: Error - #{e.message}"
-      Rails.logger.error e.backtrace.first(5).join("\n")
-      { success: false, error: e.message }
+    result = case @provider
+    when :gemini_grounding
+      search_with_gemini(query, max_tokens)
+    when :perplexity
+      search_with_perplexity(query, max_tokens)
+    when :openai_search
+      search_with_openai(query, max_tokens) # Future: OpenAI with web search
+    else
+      { success: false, error: "Unknown provider: #{@provider}" }
     end
+
+    Rails.logger.info "GoogleGrounding: #{result[:success] ? 'Success' : 'Failed'}"
+    result
   end
 
   # Request structured JSON response from grounded search
@@ -50,25 +38,34 @@ class GoogleGroundingService
   # @param json_structure_hint [String] Example JSON structure to guide response format
   # @return [Hash] { success: boolean, data: parsed_json, grounding_metadata: hash, error: string }
   def search_json(query, json_structure_hint:)
-    Rails.logger.info "GoogleGrounding: JSON search '#{query}'"
+    Rails.logger.info "GoogleGrounding: JSON search '#{query[0..100]}...'"
 
     prompt = "#{query}\n\nReturn ONLY valid JSON matching this structure:\n#{json_structure_hint}"
 
     begin
-      response = @client.ask(prompt)
-
-      # Debug logging
-      Rails.logger.info "GoogleGrounding: Response class: #{response.class}"
-      Rails.logger.info "GoogleGrounding: Response has content? #{response.respond_to?(:content)}"
-
-      # Check if response has content
-      unless response && response.content
-        Rails.logger.error "GoogleGrounding: Empty response from API"
-        Rails.logger.error "GoogleGrounding: Response: #{response.inspect}"
-        return { success: false, error: "Empty response from API" }
+      # Call the appropriate chat method based on provider
+      response = case @provider
+      when :gemini_grounding
+        @client.chat_with_grounding(
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 8000,
+          temperature: 0.3
+        )
+      else
+        @client.chat(
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 8000,
+          temperature: 0.3
+        )
       end
 
-      content = response.content.strip
+      # Check if chat call succeeded
+      unless response[:success]
+        Rails.logger.error "GoogleGrounding: Chat failed - #{response[:error]}"
+        return { success: false, error: response[:error] }
+      end
+
+      content = response[:content].strip
       Rails.logger.info "GoogleGrounding: Content received (#{content.length} chars)"
 
       # Extract JSON from response (may have markdown code blocks)
@@ -79,8 +76,8 @@ class GoogleGroundingService
       result = {
         success: true,
         data: parsed_data,
-        grounding_metadata: extract_grounding_metadata(response),
-        raw_response: response
+        grounding_metadata: extract_grounding_metadata(response[:raw_response]),
+        raw_response: response[:raw_response]
       }
 
       Rails.logger.info "GoogleGrounding: JSON search successful (#{result[:grounding_metadata][:sources_count]} sources)"
@@ -89,7 +86,7 @@ class GoogleGroundingService
     rescue JSON::ParserError => e
       Rails.logger.error "GoogleGrounding: JSON parse error - #{e.message}"
       Rails.logger.error "Response content (first 1000 chars): #{content[0..1000]}"
-      Rails.logger.error "Response content (last 500 chars): #{content[-500..-1]}"
+      Rails.logger.error "Response content (last 500 chars): #{content[-500..-1]}" if content
       { success: false, error: "Invalid JSON response: #{e.message}", raw_content: content }
     rescue RubyLLM::UnauthorizedError => e
       Rails.logger.error "GoogleGrounding: Auth error - #{e.message}"
@@ -160,32 +157,105 @@ class GoogleGroundingService
   private
 
   def build_client
-    # Build RubyLLM client with grounding enabled
-    RubyLLM.chat(provider: PROVIDER, model: MODEL)
-           .with_temperature(0.3) # Lower temperature for factual searches
-           .with_params(
-             tools: [{ google_search: {} }], # Enable Google Search grounding
-             generationConfig: {
-               maxOutputTokens: 8000  # Increased for longer JSON responses
-             }
-           )
+    case @provider
+    when :gemini_grounding
+      Ai::ClientService.for_grounding_research
+    when :perplexity
+      Ai::ClientService.for_perplexity_search
+    when :openai_search
+      Ai::ClientService.for_openai_search
+    else
+      raise "Unknown provider: #{@provider}"
+    end
   end
 
-  # Extract grounding metadata from response
-  def extract_grounding_metadata(response)
-    # RubyLLM response structure may vary, try to extract grounding info
-    # ruby_llm returns response.raw which is a Faraday::Response
+  # Gemini with google_search tool
+  def search_with_gemini(query, max_tokens)
+    response = @client.chat_with_grounding(
+      messages: [{ role: "user", content: query }],
+      max_tokens: max_tokens,
+      temperature: 0.3 # Lower for factual searches
+    )
 
+    return { success: false, error: response[:error] } unless response[:success]
+
+    {
+      success: true,
+      content: response[:content],
+      grounding_metadata: extract_gemini_grounding_metadata(response),
+      raw_response: response
+    }
+  rescue => e
+    Rails.logger.error "Gemini search failed: #{e.message}"
+    { success: false, error: e.message }
+  end
+
+  # Perplexity (has built-in web search)
+  def search_with_perplexity(query, max_tokens)
+    response = @client.chat(
+      messages: [{ role: "user", content: query }],
+      max_tokens: max_tokens,
+      temperature: 0.3
+    )
+
+    return { success: false, error: response[:error] } unless response[:success]
+
+    {
+      success: true,
+      content: response[:content],
+      grounding_metadata: extract_perplexity_citations(response),
+      raw_response: response
+    }
+  rescue => e
+    Rails.logger.error "Perplexity search failed: #{e.message}"
+    { success: false, error: e.message }
+  end
+
+  # OpenAI with future web search capability
+  def search_with_openai(query, max_tokens)
+    # Future: OpenAI may add web search tools
+    response = @client.chat(
+      messages: [{ role: "user", content: query }],
+      max_tokens: max_tokens,
+      temperature: 0.3
+    )
+
+    return { success: false, error: response[:error] } unless response[:success]
+
+    {
+      success: true,
+      content: response[:content],
+      grounding_metadata: { sources_count: 0, sources: [], note: "OpenAI web search not yet available" },
+      raw_response: response
+    }
+  rescue => e
+    Rails.logger.error "OpenAI search failed: #{e.message}"
+    { success: false, error: e.message }
+  end
+
+  # Extract grounding metadata based on provider
+  def extract_grounding_metadata(response)
+    case @provider
+    when :gemini_grounding
+      extract_gemini_grounding_metadata(response)
+    when :perplexity
+      extract_perplexity_citations(response)
+    else
+      { sources_count: 0, sources: [], web_search_queries: [] }
+    end
+  end
+
+  # Extract grounding metadata from Gemini response
+  def extract_gemini_grounding_metadata(response)
     metadata = {
       sources_count: 0,
       web_search_queries: [],
       sources: []
     }
 
-    # Try to access raw response metadata
-    if response.respond_to?(:raw)
+    # Response is a RubyLLM::Message object, not a hash
+    if response&.respond_to?(:raw)
       raw = response.raw
-      # raw is Faraday::Response, get body
       if raw.respond_to?(:body)
         body = raw.body
         body = JSON.parse(body) if body.is_a?(String)
@@ -202,6 +272,20 @@ class GoogleGroundingService
     end
 
     metadata
+  end
+
+  # Extract citations from Perplexity response
+  def extract_perplexity_citations(response)
+    # Perplexity returns citations in response
+    # Format: [1], [2], etc with citations array
+    citations = response.dig(:raw_response, :citations) || []
+
+    {
+      sources_count: citations.size,
+      sources: citations,
+      web_search_queries: ["perplexity_automatic_search"],
+      note: "Perplexity built-in search"
+    }
   end
 
   # Extract source URLs from grounding metadata

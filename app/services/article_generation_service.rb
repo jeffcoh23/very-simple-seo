@@ -4,19 +4,27 @@ class ArticleGenerationService
   def initialize(article)
     @article = article
     @keyword = article.keyword
+    @project = article.project
   end
 
   def perform
     total_cost = 0.0
 
     begin
-      # Step 1: SERP Research
       @article.update!(status: :generating, started_at: Time.current)
       Rails.logger.info "=" * 80
       Rails.logger.info "ARTICLE GENERATION: #{@keyword.keyword}"
       Rails.logger.info "=" * 80
 
-      serp_result = perform_serp_research
+      # Step 1: SERP Research
+      # SWITCH BETWEEN OLD AND NEW APPROACH HERE:
+
+      # NEW: Google Grounding (recommended) - uncomment to use
+      serp_result = perform_grounding_research
+
+      # OLD: HTML Scraping (fallback) - uncomment to use
+      # serp_result = perform_serp_research
+
       total_cost += serp_result[:cost]
 
       if serp_result[:data].nil?
@@ -91,8 +99,18 @@ class ArticleGenerationService
 
   private
 
+  # NEW: Google Grounding research
+  def perform_grounding_research
+    Rails.logger.info "\n[1/4] Grounding Research (NEW)"
+    Rails.logger.info "-" * 40
+
+    service = SerpGroundingResearchService.new(@keyword.keyword, project: @project)
+    service.perform
+  end
+
+  # OLD: HTML scraping research
   def perform_serp_research
-    Rails.logger.info "\n[1/4] SERP Research"
+    Rails.logger.info "\n[1/4] SERP Research (OLD - HTML Scraping)"
     Rails.logger.info "-" * 40
 
     service = SerpResearchService.new(@keyword.keyword)

@@ -37,6 +37,13 @@ class ArticleWriterService
       end
     end
 
+    # Write FAQ section if included in outline
+    if @outline['has_faq_section'] && @outline['faq_section']
+      Rails.logger.info "Writing FAQ section"
+      faq_content = write_faq_section(@outline['faq_section'])
+      sections << faq_content if faq_content
+    end
+
     # Write conclusion
     conclusion = write_conclusion(sections)
     return { data: nil, cost: 0.15 } if conclusion.nil?
@@ -121,11 +128,19 @@ class ArticleWriterService
     comparison_tables = @serp_data.dig('comparison_tables', 'tables') || []
     step_by_step_guides = @serp_data.dig('step_by_step_guides', 'guides') || []
     downloadable_resources = @serp_data.dig('downloadable_resources', 'resources') || []
+    recommended_tools = @serp_data['recommended_tools'] || []
 
     heading = section_outline['heading']
     word_count = section_outline['word_count'] || 400
     key_points = section_outline['key_points'] || []
     subsections = section_outline['subsections'] || []
+
+    # NEW: Get internal links and CTAs for this section
+    internal_links = section_outline['internal_links'] || []
+    section_ctas = (@outline['cta_placements'] || []).select do |cta|
+      cta['placement']&.include?("section_#{section_index + 1}") ||
+      cta['placement']&.include?("after_section_#{section_index + 1}")
+    end
 
     # Build previous context (last 2 sections for brevity)
     previous_context = build_previous_context(previous_sections.last(2))
@@ -139,6 +154,11 @@ class ArticleWriterService
     tables_text = build_tables_prompt(comparison_tables)
     guides_text = build_guides_prompt(step_by_step_guides)
     resources_text = build_resources_prompt(downloadable_resources)
+    tools_text = build_tools_prompt(recommended_tools)
+
+    # NEW: Build internal links and CTAs prompts
+    internal_links_text = build_internal_links_prompt(internal_links)
+    ctas_text = build_ctas_prompt(section_ctas)
 
     prompt = <<~PROMPT
       Write a section for an article about "#{@keyword}".
@@ -178,6 +198,12 @@ class ArticleWriterService
 
       #{resources_text}
 
+      #{tools_text}
+
+      #{internal_links_text}
+
+      #{ctas_text}
+
       EXAMPLES ALREADY USED (DO NOT repeat these):
       #{@used_examples.uniq.join(", ")}
 
@@ -204,7 +230,9 @@ class ArticleWriterService
       - Use natural, conversational tone
       - Avoid AI clichés like "it's important to note" or "remember"
       - Make it actionable and specific with HOW details, not just WHAT
-      - Embed visuals, tables, guides, and resources when HIGHLY relevant to this section
+      - Embed visuals, tables, guides, resources, and tools when HIGHLY relevant to this section
+      - Include internal links naturally in context (not forced or awkward)
+      - Place CTAs at the END of this section if provided (not in the middle)
     PROMPT
 
     client = Ai::ClientService.for_article_writing
@@ -279,6 +307,68 @@ class ArticleWriterService
     response[:content].strip
   rescue => e
     Rails.logger.error "Conclusion writing failed: #{e.message}"
+    nil
+  end
+
+  def write_faq_section(faq_section_outline)
+    faqs = @serp_data['faqs'] || []
+    return nil if faqs.empty?
+
+    heading = faq_section_outline['heading'] || "Frequently Asked Questions"
+    word_count = faq_section_outline['word_count'] || 600
+    questions_to_include = faq_section_outline['questions_to_include'] || []
+
+    # Match FAQs from SERP data with questions_to_include
+    selected_faqs = questions_to_include.map do |question_text|
+      faqs.find { |faq| faq['question']&.downcase&.include?(question_text.downcase) || question_text.downcase.include?(faq['question']&.downcase || '') }
+    end.compact
+
+    # If outline didn't specify questions, take first 8-12 from SERP data
+    selected_faqs = faqs.take(10) if selected_faqs.empty?
+
+    faqs_text = selected_faqs.map do |faq|
+      text = "**Q: #{faq['question']}**\n\n#{faq['answer']}"
+      text += " ([Source](#{faq['source_url']}))" if faq['source_url'].present?
+      text
+    end.join("\n\n")
+
+    prompt = <<~PROMPT
+      Write a FAQ section for an article about "#{@keyword}".
+
+      AVAILABLE FAQs (use these questions and answers):
+      #{faqs_text}
+
+      #{voice_instructions}
+
+      TARGET: #{word_count} words (approximately #{selected_faqs.size} Q&A pairs)
+
+      REQUIREMENTS:
+      - Write in markdown format
+      - Include the H2 heading: ## #{heading}
+      - Format each FAQ as:
+        ### Question text here?
+        Answer text here with details and examples.
+
+      - Keep answers concise but complete (2-4 sentences each)
+      - Use the exact questions and answers provided above
+      - Maintain source citations in answers where provided
+      - Add brief context or examples to make answers more useful
+      - Avoid repeating information already covered in main article
+      - Order questions from most common to more specific
+    PROMPT
+
+    client = Ai::ClientService.for_article_writing
+    response = client.chat(
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: (word_count * 2).to_i,
+      temperature: 0.7
+    )
+
+    return nil unless response[:success]
+
+    response[:content].strip
+  rescue => e
+    Rails.logger.error "FAQ section writing failed: #{e.message}"
     nil
   end
 
@@ -498,6 +588,80 @@ class ArticleWriterService
     parts << "- Add context: 'This Google Sheets template includes...'"
     parts << "- Use clear CTA: 'Download the [X]', 'Get the free [Y]'"
     parts << "- Only link to resources that readers can immediately use"
+
+    parts.join("\n")
+  end
+
+  # Build prompt text for recommended tools
+  def build_tools_prompt(tools)
+    return "" if tools.empty?
+
+    parts = []
+    parts << "RECOMMENDED TOOLS:"
+
+    tools.each_with_index do |tool, i|
+      parts << "#{i + 1}. #{tool['tool_name']} - #{tool['category']}"
+      parts << "   Use case: #{tool['use_case']}"
+      parts << "   Pricing: #{tool['pricing']}"
+      parts << "   Why: #{tool['why_recommended']}"
+      parts << "   URL: #{tool['url']}"
+    end
+
+    parts << ""
+    parts << "TOOL USAGE GUIDELINES:"
+    parts << "- Mention 2-3 tools if highly relevant to this section"
+    parts << "- Format: **[Tool Name](url)** - Brief description"
+    parts << "- Include pricing context when relevant"
+    parts << "- Explain specific use case for this topic"
+    parts << "- Don't list all tools - only mention most relevant ones"
+
+    parts.join("\n")
+  end
+
+  # Build prompt text for internal links
+  def build_internal_links_prompt(internal_links)
+    return "" if internal_links.empty?
+
+    parts = []
+    parts << "INTERNAL LINKS TO INCLUDE:"
+
+    internal_links.each_with_index do |link, i|
+      parts << "#{i + 1}. Link text: \"#{link['anchor_text']}\""
+      parts << "   Target article: #{link['target_article_title']}"
+      parts << "   Context: #{link['context']}"
+    end
+
+    parts << ""
+    parts << "INTERNAL LINKING GUIDELINES:"
+    parts << "- Weave internal links naturally into the text"
+    parts << "- Format: [anchor text](/articles/target-slug)"
+    parts << "- DON'T force links awkwardly - make them contextually relevant"
+    parts << "- Place links where they provide value to the reader"
+    parts << "- Example: 'For more on customer interviews, see our guide on [interview best practices](/articles/interview-guide).'"
+
+    parts.join("\n")
+  end
+
+  # Build prompt text for CTAs
+  def build_ctas_prompt(ctas)
+    return "" if ctas.empty?
+
+    parts = []
+    parts << "CALL-TO-ACTION (CTA) TO INCLUDE:"
+
+    ctas.each_with_index do |cta, i|
+      parts << "#{i + 1}. CTA: \"#{cta['cta_text']}\""
+      parts << "   URL: #{cta['cta_url']}"
+      parts << "   Context: #{cta['context']}"
+    end
+
+    parts << ""
+    parts << "CTA PLACEMENT GUIDELINES:"
+    parts << "- Place CTA at the END of this section (after all content)"
+    parts << "- Add brief context before CTA (why it's relevant)"
+    parts << "- Format as: **[CTA Text](url)**"
+    parts << "- Example: 'Ready to validate your idea? **[Start your free trial](url)** and get instant feedback.'"
+    parts << "- Keep it natural and relevant to what was just discussed"
 
     parts.join("\n")
   end

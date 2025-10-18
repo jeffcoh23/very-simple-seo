@@ -47,47 +47,32 @@ class AutofillProjectService
     Rails.logger.info "Detecting competitors for: #{@domain}"
 
     begin
-      # Build a simple search query based on what the site does
-      search_query = build_search_query(domain_data)
+      # STEP 1: Use Google Custom Search API to find potential competitor domains
+      # Use multiple search queries for broader coverage
+      candidate_domains = fetch_competitor_candidates_from_search(domain_data)
+      Rails.logger.info "Google Search found #{candidate_domains.size} candidate domains"
 
-      Rails.logger.info "Searching for competitors with query: #{search_query}"
-      scraper = SerpResearchService.new(search_query)
-      all_serp_results = scraper.search_results_only
+      # STEP 2: Scrape each candidate domain to get their actual content
+      scraped_candidates = scrape_candidate_domains(candidate_domains)
+      Rails.logger.info "Successfully scraped #{scraped_candidates.size} domains"
 
-      if all_serp_results.empty?
-        Rails.logger.warn "No search results found"
-        return []
+      # STEP 3: Use Gemini Grounding to analyze scraped content and verify real competitors
+      verified_competitors = if scraped_candidates.any?
+        verify_with_grounding(scraped_candidates, domain_data)
+      else
+        []
       end
+      Rails.logger.info "Grounding verified #{verified_competitors.size} true competitors from scraped data"
 
-      Rails.logger.info "Found #{all_serp_results.size} search results"
+      # STEP 4: Ask Grounding to discover any competitors Google Search may have missed
+      additional_competitors = discover_additional_competitors_via_grounding(domain_data, verified_competitors)
+      Rails.logger.info "Grounding discovered #{additional_competitors.size} additional competitors"
 
-      # Extract unique domains - minimal filtering, let AI and user curate
-      user_domain_host = URI(@domain).host.gsub(/^www\./, '')
+      # Combine and dedupe
+      all_competitors = (verified_competitors + additional_competitors).uniq { |c| c[:domain] }
+      Rails.logger.info "Total competitors found: #{all_competitors.size}"
 
-      candidate_domains = all_serp_results.map do |result|
-        next unless result[:url]
-
-        uri = URI(result[:url])
-        host = uri.host.gsub(/^www\./, '')
-        domain = "#{uri.scheme}://#{uri.host}"
-
-        # Skip only the user's own domain
-        next if host == user_domain_host
-
-        {
-          domain: domain,
-          title: result[:title],
-          description: result[:snippet],
-          source: 'auto_detected'
-        }
-      end.compact.uniq { |c| c[:domain] }
-
-      Rails.logger.info "Found #{candidate_domains.size} candidate competitors"
-
-      # Skip AI filtering - let users manually curate instead
-      # This gives them more options and reduces false negatives
-      Rails.logger.info "Returning all #{candidate_domains.size} competitors for user curation"
-      candidate_domains  # Return all - users can manually remove unwanted ones
+      all_competitors
     rescue => e
       Rails.logger.error "Competitor detection failed: #{e.message}"
       Rails.logger.error e.backtrace.first(3).join("\n")
@@ -95,98 +80,311 @@ class AutofillProjectService
     end
   end
 
-  def build_search_query(domain_data)
-    # Get main topic from H1 or title
-    raw_topic = domain_data[:h1s]&.first || domain_data[:title] || ""
+  def fetch_competitor_candidates_from_search(domain_data)
+    title = domain_data[:title] || @domain
+    description = domain_data[:meta_description] || ""
+    main_terms = extract_key_terms(title, description)
 
-    # Clean it up - remove the site name/branding
-    topic = raw_topic.split('|').first.strip
+    # Use multiple search query strategies to find actual tool websites
+    queries = [
+      "#{main_terms} alternatives",
+      "#{main_terms} saas tools",
+      "#{main_terms} app software",
+      "best #{main_terms} platforms"
+    ]
 
-    # Don't use overly generic niches - use the actual topic instead
-    # Generic niches like "SaaS", "App", "Software" are too broad
-    generic_niches = %w[saas software app platform tool service business]
+    all_candidates = []
 
-    if @niche.present? && !generic_niches.include?(@niche.downcase)
-      # Niche is specific enough, use it
-      search_term = @niche
+    queries.each do |query|
+      Rails.logger.info "Searching Google for: #{query}"
+      results = fetch_domains_from_google_search(query)
+      all_candidates.concat(results)
+      sleep 0.5 # Be nice to Google API
+    end
+
+    # Dedupe by domain
+    all_candidates.uniq { |c| c[:domain] }
+  end
+
+  def fetch_domains_from_google_search(query)
+    api_key = ENV['GOOGLE_SEARCH_KEY']
+    cx = ENV['GOOGLE_SEARCH_CX']
+
+    unless api_key.present?
+      Rails.logger.warn "GOOGLE_SEARCH_KEY not configured"
+      return []
+    end
+
+    require 'net/http'
+
+    all_results = []
+
+    # Fetch 2 pages (20 results) per query to avoid excessive API calls
+    [1, 11].each do |start_index|
+      uri = URI('https://www.googleapis.com/customsearch/v1')
+      params = {
+        key: api_key,
+        cx: cx,
+        q: query,
+        start: start_index,
+        num: 10
+      }
+      uri.query = URI.encode_www_form(params)
+
+      response = Net::HTTP.get_response(uri)
+      next unless response.is_a?(Net::HTTPSuccess)
+
+      data = JSON.parse(response.body)
+      items = data['items'] || []
+
+      items.each do |item|
+        next unless item['link']
+
+        begin
+          url = item['link']
+          uri_obj = URI(url)
+
+          # Skip own domain and obvious non-competitors
+          host = uri_obj.host.gsub(/^www\./, '')
+          next if host.include?(@domain.gsub(%r{^https?://}, '').gsub(/^www\./, ''))
+          next if is_obvious_non_competitor?(host)
+
+          all_results << {
+            url: url,
+            domain: "https://#{uri_obj.host}",
+            title: item['title'],
+            snippet: item['snippet']
+          }
+        rescue URI::InvalidURIError
+          next
+        end
+      end
+
+      sleep 0.3
+    end
+
+    all_results.uniq { |r| r[:domain] }
+  rescue => e
+    Rails.logger.error "Google Search failed: #{e.message}"
+    []
+  end
+
+  def is_obvious_non_competitor?(host)
+    excluded = [
+      'reddit.com', 'medium.com', 'quora.com', 'stackoverflow.com',
+      'news.ycombinator.com', 'facebook.com', 'twitter.com', 'linkedin.com',
+      'youtube.com', 'techcrunch.com', 'forbes.com', 'wired.com',
+      'g2.com', 'capterra.com', 'trustpilot.com', 'producthunt.com',
+      'alternativeto.net', 'github.com'
+    ]
+    excluded.any? { |ex| host.include?(ex) }
+  end
+
+  def scrape_candidate_domains(candidates)
+    scraped = []
+
+    candidates.first(20).each do |candidate|
+      Rails.logger.info "  Scraping #{candidate[:domain]}..."
+
+      scraper = DomainAnalysisService.new(candidate[:domain])
+      scraped_data = scraper.analyze
+
+      if scraped_data && !scraped_data[:error]
+        scraped << {
+          domain: candidate[:domain],
+          url: candidate[:url],
+          title: scraped_data[:title] || candidate[:title],
+          meta_description: scraped_data[:meta_description],
+          h1s: scraped_data[:h1s],
+          h2s: scraped_data[:h2s],
+          content_summary: scraped_data[:content_summary]
+        }
+      end
+
+      sleep 1 # Be nice
+    end
+
+    scraped
+  end
+
+  def verify_with_grounding(scraped_candidates, domain_data)
+    grounding = GoogleGroundingService.new
+
+    my_title = domain_data[:title] || @domain
+    my_description = domain_data[:meta_description] || ""
+
+    # Build detailed list of scraped competitors
+    candidate_list = scraped_candidates.map do |c|
+      <<~CANDIDATE
+        Domain: #{c[:domain]}
+        Title: #{c[:title]}
+        Description: #{c[:meta_description]}
+        Main Topics: #{c[:h1s]&.first(2)&.join(', ')}
+        ---
+      CANDIDATE
+    end.join("\n")
+
+    query = <<~QUERY
+      I scraped potential competitor websites. Your job: determine which are TRUE direct competitors.
+
+      MY BUSINESS:
+      Title: #{my_title}
+      Description: #{my_description}
+      Website: #{@domain}
+
+      SCRAPED CANDIDATES:
+      #{candidate_list}
+
+      FILTERING CRITERIA - Must pass ALL tests:
+      1. Same primary job - customers would use THIS instead of my business for the SAME task?
+      2. Same product category - not adjacent/related categories
+      3. Dedicated tool - not general platforms
+      4. Actual software - not blogs/news/content sites
+
+      For each TRUE competitor:
+      - Verify by researching the domain if needed
+      - Return domain (without https://), title, and what they do
+
+      Return ONLY valid JSON array of verified competitors:
+      [
+        {
+          "domain": "competitor.com",
+          "title": "Company Name",
+          "description": "What they actually do"
+        }
+      ]
+
+      Be strict - only include clear matches that pass all 4 tests.
+    QUERY
+
+    json_structure = [{domain: "competitor.com", title: "Name", description: "What they do"}].to_json
+    result = grounding.search_json(query, json_structure_hint: json_structure)
+
+    return [] unless result[:success]
+
+    Rails.logger.info "Grounding sources: #{result[:grounding_metadata][:sources_count]}"
+    parse_competitor_data(result[:data])
+  end
+
+  def discover_additional_competitors_via_grounding(domain_data, already_found)
+    grounding = GoogleGroundingService.new
+
+    my_title = domain_data[:title] || @domain
+    my_description = domain_data[:meta_description] || ""
+
+    # Build list of already found competitors to avoid duplicates
+    already_found_list = if already_found.any?
+      already_found.map { |c| "- #{c[:domain]}" }.join("\n")
     else
-      # Use the actual topic from the site (what they DO)
-      search_term = topic
+      "(none found yet)"
     end
 
-    # If search term is still too short/generic, use first few meaningful words
-    if search_term.split.size < 2
-      # Fall back to first H2 or meta description for context
-      search_term = domain_data[:h2s]&.first || domain_data[:meta_description] || search_term
-      search_term = search_term.split(/[.|,]/).first.strip  # Take first sentence
-    end
+    query = <<~QUERY
+      Search the web to find direct competitor tools for this business.
 
-    search_term
+      MY BUSINESS:
+      Title: #{my_title}
+      Description: #{my_description}
+      Website: #{@domain}
+
+      ALREADY FOUND (do NOT include these):
+      #{already_found_list}
+
+      Your job: Find OTHER direct competitors we may have missed.
+
+      FILTERING CRITERIA - Must pass ALL tests:
+      1. Same primary job - customers would use THIS instead of my business for the SAME task?
+      2. Same product category - not adjacent/related categories
+      3. Dedicated tool - not general platforms
+      4. Actual software - not blogs/news/content sites
+
+      For each competitor you find:
+      - Research the domain to verify it's a real competitor
+      - Return domain (without https://), title, and what they do
+
+      Return ONLY valid JSON array (find 3-10 additional competitors if they exist):
+      [
+        {
+          "domain": "competitor.com",
+          "title": "Company Name",
+          "description": "What they actually do"
+        }
+      ]
+
+      Be strict - only include clear matches that pass all 4 tests.
+    QUERY
+
+    json_structure = [{domain: "competitor.com", title: "Name", description: "What they do"}].to_json
+    result = grounding.search_json(query, json_structure_hint: json_structure)
+
+    return [] unless result[:success]
+
+    Rails.logger.info "Additional discovery sources: #{result[:grounding_metadata][:sources_count]}"
+    parse_competitor_data(result[:data])
   end
 
-  def filter_competitors_with_ai(candidates, domain_data)
-    return candidates if candidates.empty?
+  def extract_key_terms(title, description)
+    # Remove common words and extract main concept
+    combined = "#{title} #{description}".downcase
 
-    # Build prompt with user's domain context and candidate list
-    user_description = domain_data[:h1s]&.first || domain_data[:title] || "website"
+    # Remove common words
+    stop_words = %w[the a an and or but for with from about in on at to of is are was were be been being have has had do does did will would could should may might must can]
+    words = combined.split(/\W+/).reject { |w| stop_words.include?(w) || w.length < 3 }
 
-    candidates_list = candidates.map.with_index do |c, i|
-      "#{i + 1}. #{c[:domain]}\n   Title: #{c[:title]}\n   Description: #{c[:description]}"
-    end.join("\n\n")
-
-    prompt = <<~PROMPT
-      I'm analyzing competitors for: #{@domain}
-      What they do: #{user_description}
-
-      Here are potential competitors from Google's related sites:
-
-      #{candidates_list}
-
-      For each site, determine if it's a LIKELY COMPETITOR (actual competing product/service) or NOT A COMPETITOR (aggregator, news site, blog, directory, review site, etc.).
-
-      Return ONLY a JSON array with the numbers of likely competitors:
-      ["1", "3", "5"]
-
-      Include sites that:
-      - Offer a similar product/service
-      - Serve the same target audience
-      - Solve similar problems
-
-      Exclude sites that are:
-      - News/blog sites (even if they cover the topic)
-      - Aggregator/directory sites (alternatives.to, g2.com, etc.)
-      - Review sites
-      - General business tools (not specific to the niche)
-      - Forums or communities
-    PROMPT
-
-    client = Ai::ClientService.for_keyword_analysis
-    response = client.chat(
-      messages: [{ role: "user", content: prompt }],
-      system_prompt: "You are an expert at identifying competitive products and filtering out non-competitive sites.",
-      max_tokens: 500,
-      temperature: 0.3  # Lower temperature for more consistent filtering
-    )
-
-    return candidates unless response[:success]
-
-    # Parse the JSON response
-    begin
-      json_str = response[:content][/\[.*\]/m]
-      return candidates unless json_str
-
-      selected_indices = JSON.parse(json_str).map(&:to_i)
-
-      # Return the selected competitors
-      selected = candidates.select.with_index { |_, i| selected_indices.include?(i + 1) }
-
-      # If AI filtered out everything, return top candidates as fallback
-      selected.any? ? selected : candidates.first(5)
-    rescue JSON::ParserError => e
-      Rails.logger.error "Failed to parse AI competitor filter response: #{e.message}"
-      candidates  # Return all on parse error
-    end
+    # Take first 3-5 meaningful words
+    words.first(4).join(' ')
   end
+
+  def parse_competitor_data(data)
+    competitors_array = case data
+    when Array
+      data
+    when Hash
+      data["competitors"] || []
+    else
+      []
+    end
+
+    competitors_array.map do |c|
+      domain = normalize_competitor_domain(c)
+      next unless domain
+
+      {
+        domain: domain,
+        title: c["title"] || c["name"] || extract_site_name(domain),
+        description: c["description"] || c["what_they_do"] || "",
+        source: 'auto_detected'
+      }
+    end.compact
+  end
+
+  def normalize_competitor_domain(competitor)
+    domain = competitor.is_a?(Hash) ? (competitor["domain"] || competitor["url"]) : competitor
+    return nil if domain.blank?
+
+    # Clean up domain
+    domain = domain.to_s.strip
+                 .gsub(%r{^https?://}, '')
+                 .gsub(%r{^www\.}, '')
+                 .gsub(%r{/$}, '')
+                 .split('/').first
+                 .downcase
+
+    return nil if domain.empty? || !domain.include?('.')
+
+    # Add https:// prefix for consistency
+    "https://#{domain}"
+  end
+
+  def extract_site_name(domain)
+    # Extract name from domain (e.g., "bizway" from "https://bizway.io")
+    uri = URI.parse(domain)
+    host = uri.host.gsub(/^www\./, '')
+    host.split('.').first.capitalize
+  rescue
+    "Competitor"
+  end
+
 
   def generate_seeds(domain_data, competitors)
     # Use SeedKeywordGenerator in raw domain mode (no project yet)
@@ -200,33 +398,5 @@ class AutofillProjectService
 
     # Use the new method that accepts competitor domains directly
     generator.generate_with_competitors(competitor_domains)
-  end
-
-  def fallback_seeds(domain_data)
-    seeds = []
-
-    # Use H1s and H2s as seeds
-    seeds += domain_data[:h1s]&.map(&:downcase) || []
-    seeds += domain_data[:h2s]&.first(10)&.map(&:downcase) || []
-
-    # Use sitemap keywords
-    seeds += domain_data[:sitemap_keywords] || []
-
-    # Add some generic ones based on domain name
-    domain_name = extract_domain_name
-    seeds += [
-      domain_name,
-      "#{domain_name} guide",
-      "how to use #{domain_name}",
-      "#{domain_name} review"
-    ]
-
-    seeds.uniq.first(15)
-  end
-
-  def extract_domain_name
-    URI(@domain).host.gsub(/^www\./, '').split('.').first
-  rescue
-    "tool"
   end
 end
