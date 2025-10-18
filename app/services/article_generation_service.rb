@@ -122,7 +122,7 @@ class ArticleGenerationService
     Rails.logger.info "-" * 40
 
     voice_profile = @article.project.respond_to?(:voice_profile) ? @article.project.voice_profile : nil
-    service = ArticleOutlineService.new(@keyword.keyword, serp_data, voice_profile: voice_profile)
+    service = ArticleOutlineService.new(@keyword.keyword, serp_data, voice_profile: voice_profile, project: @project)
     service.perform
   end
 
@@ -131,7 +131,7 @@ class ArticleGenerationService
     Rails.logger.info "-" * 40
 
     voice_profile = @article.project.respond_to?(:voice_profile) ? @article.project.voice_profile : nil
-    service = ArticleWriterService.new(@keyword.keyword, outline, serp_data, voice_profile: voice_profile)
+    service = ArticleWriterService.new(@keyword.keyword, outline, serp_data, voice_profile: voice_profile, project: @project)
     service.perform
   end
 
@@ -139,7 +139,7 @@ class ArticleGenerationService
     Rails.logger.info "\n[4/4] Improving Article"
     Rails.logger.info "-" * 40
 
-    service = ArticleImprovementService.new(markdown, serp_data)
+    service = ArticleImprovementService.new(markdown, serp_data, project: @project)
     service.perform
   end
 

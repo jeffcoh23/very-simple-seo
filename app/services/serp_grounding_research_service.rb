@@ -169,29 +169,32 @@ class SerpGroundingResearchService
     Rails.logger.info "Grounding API call: #{request_type}"
 
     begin
-      # Call Gemini with google_search tool and INLINE CITATIONS enabled
-      chat = RubyLLM.chat(provider: :gemini, model: "gemini-2.5-flash")
+      # Call Gemini with google_search tool
+      # Note: Can't use responseMimeType with tools, so we rely on prompt formatting
+      chat = RubyLLM.chat(provider: :gemini, model: "gemini-2.5-pro")
                     .with_temperature(0.3)
                     .with_params(
-                      tools: [{ google_search: {} }],
+                      tools: [ { google_search: {} } ],
                       generationConfig: {
-                        maxOutputTokens: 8000,
-                        responseMimeType: "application/json"  # Force JSON response
+                        maxOutputTokens: 8000
                       }
                     )
 
       response = chat.ask(prompt)
       content = response.content.strip
 
+      # Extract JSON from response (may have markdown code blocks or text around it)
+      json_content = extract_json_from_response(content)
+
       # Parse JSON response
-      data = JSON.parse(content)
+      data = JSON.parse(json_content)
 
       Rails.logger.info "#{request_type} returned: #{data.is_a?(Array) ? data.size : 'object'} items"
       data
 
     rescue JSON::ParserError => e
       Rails.logger.error "JSON parse error for #{request_type}: #{e.message}"
-      Rails.logger.error "Content: #{content[0..500]}"
+      Rails.logger.error "Content: #{content[0..500]}" if content
       request_type == "content_elements" ? {} : []
     rescue => e
       Rails.logger.error "Grounding API error for #{request_type}: #{e.message}"
@@ -202,42 +205,42 @@ class SerpGroundingResearchService
 
   def merge_research_data(examples, stats, content)
     {
-      'detailed_examples' => examples || [],
-      'statistics' => stats || [],
-      'faqs' => content['faqs'] || [],
-      'recommended_tools' => content['recommended_tools'] || [],
-      'step_by_step_guides' => { 'guides' => content['step_by_step_guides'] || [] },
-      'comparison_tables' => { 'tables' => content['comparison_tables'] || [] },
-      'internal_link_opportunities' => content['internal_link_opportunities'] || [],
-      'cta_placements' => content['cta_placements'] || [],
-      'visual_elements' => { 'images' => [], 'videos' => [] }, # Will add later
-      'downloadable_resources' => { 'resources' => [] },
-      'common_topics' => [],
-      'content_gaps' => [],
-      'average_word_count' => 2500,
-      'recommended_approach' => ''
+      "detailed_examples" => examples || [],
+      "statistics" => stats || [],
+      "faqs" => content["faqs"] || [],
+      "recommended_tools" => content["recommended_tools"] || [],
+      "step_by_step_guides" => { "guides" => content["step_by_step_guides"] || [] },
+      "comparison_tables" => { "tables" => content["comparison_tables"] || [] },
+      "internal_link_opportunities" => content["internal_link_opportunities"] || [],
+      "cta_placements" => content["cta_placements"] || [],
+      "visual_elements" => { "images" => [], "videos" => [] }, # Will add later
+      "downloadable_resources" => { "resources" => [] },
+      "common_topics" => [],
+      "content_gaps" => [],
+      "average_word_count" => 2500,
+      "recommended_approach" => ""
     }
   end
 
   def validate_and_clean_results(data)
     # Remove duplicates from examples
-    if data['detailed_examples'].is_a?(Array)
-      data['detailed_examples'] = data['detailed_examples']
-        .uniq { |ex| ex['company']&.downcase }
-        .reject { |ex| ex['company'].blank? || ex['outcome'].blank? || ex['source_url'].blank? }
+    if data["detailed_examples"].is_a?(Array)
+      data["detailed_examples"] = data["detailed_examples"]
+        .uniq { |ex| ex["company"]&.downcase }
+        .reject { |ex| ex["company"].blank? || ex["outcome"].blank? || ex["source_url"].blank? }
     end
 
     # Remove stats without sources
-    if data['statistics'].is_a?(Array)
-      data['statistics'] = data['statistics']
-        .uniq { |stat| stat['stat'] }
-        .reject { |stat| stat['source_url'].blank? }
+    if data["statistics"].is_a?(Array)
+      data["statistics"] = data["statistics"]
+        .uniq { |stat| stat["stat"] }
+        .reject { |stat| stat["source_url"].blank? }
     end
 
     # Remove empty tools
-    if data['recommended_tools'].is_a?(Array)
-      data['recommended_tools'] = data['recommended_tools']
-        .reject { |tool| tool['tool_name'].blank? || tool['url'].blank? }
+    if data["recommended_tools"].is_a?(Array)
+      data["recommended_tools"] = data["recommended_tools"]
+        .reject { |tool| tool["tool_name"].blank? || tool["url"].blank? }
     end
 
     Rails.logger.info "After validation:"
@@ -246,6 +249,27 @@ class SerpGroundingResearchService
     Rails.logger.info "  - Tools: #{data['recommended_tools']&.size} (empty removed)"
 
     data
+  end
+
+  def extract_json_from_response(content)
+    # Remove markdown code blocks if present
+    if content.include?("```")
+      json_match = content.match(/```(?:json)?\s*\n?(.*?)\n?```/m)
+      return json_match[1].strip if json_match
+    end
+
+    # Try to find JSON object or array in the content
+    if content =~ /^\s*[\[{]/
+      # Content starts with [ or { - likely pure JSON
+      return content.strip
+    end
+
+    # Look for JSON anywhere in the content
+    json_match = content.match(/(\[.*\]|\{.*\})/m)
+    return json_match[1] if json_match
+
+    # Return content as-is and let JSON.parse fail with helpful error
+    content.strip
   end
 
   def build_internal_context
@@ -378,10 +402,10 @@ class SerpGroundingResearchService
   end
 
   def build_internal_linking_prompt(internal_context)
-    return "" unless internal_context && internal_context['existing_articles']&.any?
+    return "" unless internal_context && internal_context["existing_articles"]&.any?
 
-    existing_articles = internal_context['existing_articles']
-    ctas = internal_context['ctas'] || []
+    existing_articles = internal_context["existing_articles"]
+    ctas = internal_context["ctas"] || []
 
     <<~SECTION
       ## 10. INTERNAL LINKING & CTAs
@@ -533,50 +557,50 @@ class SerpGroundingResearchService
 
   def transform_grounding_to_serp_format(grounding_data, metadata)
     # Separate videos from images
-    visual_elements = grounding_data['visual_elements'] || []
-    images = visual_elements.select { |v| v['type'] == 'image' }
-    videos = visual_elements.select { |v| v['type'] == 'video' }
+    visual_elements = grounding_data["visual_elements"] || []
+    images = visual_elements.select { |v| v["type"] == "image" }
+    videos = visual_elements.select { |v| v["type"] == "video" }
 
     {
       # Core data from grounding
-      'detailed_examples' => grounding_data['examples'] || [],
-      'statistics' => grounding_data['statistics'] || [],
-      'faqs' => grounding_data['faqs'] || [],
-      'people_also_ask' => grounding_data['people_also_ask'] || [],
+      "detailed_examples" => grounding_data["examples"] || [],
+      "statistics" => grounding_data["statistics"] || [],
+      "faqs" => grounding_data["faqs"] || [],
+      "people_also_ask" => grounding_data["people_also_ask"] || [],
 
       # Visual elements
-      'visual_elements' => {
-        'images' => images,
-        'videos' => videos
+      "visual_elements" => {
+        "images" => images,
+        "videos" => videos
       },
 
       # Structured content
-      'comparison_tables' => {
-        'tables' => grounding_data['comparison_tables'] || []
+      "comparison_tables" => {
+        "tables" => grounding_data["comparison_tables"] || []
       },
-      'step_by_step_guides' => {
-        'guides' => grounding_data['step_by_step_guides'] || []
+      "step_by_step_guides" => {
+        "guides" => grounding_data["step_by_step_guides"] || []
       },
-      'downloadable_resources' => {
-        'resources' => grounding_data['downloadable_resources'] || []
+      "downloadable_resources" => {
+        "resources" => grounding_data["downloadable_resources"] || []
       },
-      'recommended_tools' => grounding_data['recommended_tools'] || [],
+      "recommended_tools" => grounding_data["recommended_tools"] || [],
 
       # Internal linking & CTAs
-      'internal_link_opportunities' => grounding_data['internal_link_opportunities'] || [],
-      'cta_placements' => grounding_data['cta_placements'] || [],
+      "internal_link_opportunities" => grounding_data["internal_link_opportunities"] || [],
+      "cta_placements" => grounding_data["cta_placements"] || [],
 
       # Competitive analysis
-      'common_topics' => grounding_data.dig('competitive_analysis', 'common_topics') || [],
-      'content_gaps' => grounding_data.dig('competitive_analysis', 'content_gaps') || [],
-      'average_word_count' => grounding_data.dig('competitive_analysis', 'average_word_count') || 2000,
-      'recommended_approach' => grounding_data.dig('competitive_analysis', 'recommended_approach') || '',
+      "common_topics" => grounding_data.dig("competitive_analysis", "common_topics") || [],
+      "content_gaps" => grounding_data.dig("competitive_analysis", "content_gaps") || [],
+      "average_word_count" => grounding_data.dig("competitive_analysis", "average_word_count") || 2000,
+      "recommended_approach" => grounding_data.dig("competitive_analysis", "recommended_approach") || "",
 
       # Grounding metadata
-      'grounding_metadata' => {
-        'sources_count' => metadata[:sources_count],
-        'sources' => metadata[:sources],
-        'web_search_queries' => metadata[:web_search_queries]
+      "grounding_metadata" => {
+        "sources_count" => metadata[:sources_count],
+        "sources" => metadata[:sources],
+        "web_search_queries" => metadata[:web_search_queries]
       }
     }
   end

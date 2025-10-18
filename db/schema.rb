@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_15_013135) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_18_190136) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -199,6 +199,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_15_013135) do
     t.jsonb "seed_keywords", default: []
     t.text "description"
     t.jsonb "domain_analysis"
+    t.jsonb "internal_content_index", default: {}
+    t.index ["internal_content_index"], name: "index_projects_on_internal_content_index", using: :gin
     t.index ["user_id"], name: "index_projects_on_user_id"
   end
 

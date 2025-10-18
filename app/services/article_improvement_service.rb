@@ -37,18 +37,19 @@ class ArticleImprovementService
     /get feedback/i
   ].freeze
 
-  def initialize(article_markdown, serp_data)
+  def initialize(article_markdown, serp_data, project: nil)
     @article_markdown = article_markdown
     @serp_data = serp_data
+    @project = project
   end
 
   def perform
-    Rails.logger.info "Improving article quality (5 passes)"
+    Rails.logger.info "Improving article quality (6 passes)"
 
     # Pass 1: Fix overused examples
     improved = fix_overused_examples(@article_markdown)
 
-    # Pass 2: Fix overused statistics (NEW)
+    # Pass 2: Fix overused statistics
     improved = fix_overused_statistics(improved)
 
     # Pass 3: Remove AI clichés
@@ -57,12 +58,15 @@ class ArticleImprovementService
     # Pass 4: Shorten paragraphs
     improved = shorten_paragraphs(improved)
 
-    # Pass 5: Add depth to shallow content (NEW)
+    # Pass 5: Add depth to shallow content
     improved = add_tactical_depth(improved)
+
+    # Pass 6: Verify brand integration (NEW)
+    improved = verify_brand_integration(improved)
 
     Rails.logger.info "Article improved successfully"
 
-    { data: improved, cost: 0.08 } # 5 small GPT-4o Mini calls
+    { data: improved, cost: 0.10 } # 6 small GPT-4o Mini calls
   end
 
   private
@@ -339,6 +343,74 @@ class ArticleImprovementService
     response[:content].strip
   rescue => e
     Rails.logger.error "Pass 5 failed: #{e.message}"
+    markdown # Return original on error
+  end
+
+  # Pass 6: Verify brand integration (NEW)
+  def verify_brand_integration(markdown)
+    Rails.logger.info "Pass 6: Verifying brand integration"
+
+    # Skip if no project
+    return markdown unless @project
+
+    # Count brand mentions
+    brand_name = @project.name
+    brand_count = markdown.scan(/#{Regexp.escape(brand_name)}/i).size
+
+    # Count placeholder CTAs
+    has_placeholders = markdown.include?('example.com') || markdown.include?('yourdomain.com')
+
+    # Needs improvement if: no brand mentions OR has placeholders
+    needs_improvement = brand_count == 0 || has_placeholders
+
+    unless needs_improvement
+      Rails.logger.info "Brand integration looks good (#{brand_count} mentions, no placeholders)"
+      return markdown
+    end
+
+    Rails.logger.info "Fixing brand integration (#{brand_count} mentions, placeholders: #{has_placeholders})"
+
+    prompt = <<~PROMPT
+      This article needs brand integration improvements.
+
+      BRAND: #{brand_name}
+      DOMAIN: #{@project.domain}
+      CURRENT BRAND MENTIONS: #{brand_count}
+
+      ARTICLE:
+      #{markdown}
+
+      INSTRUCTIONS:
+      #{brand_count == 0 ? "1. Add 2-3 natural mentions of #{brand_name} in relevant sections (intro, methods, conclusion)" : ""}
+      #{has_placeholders ? "2. Replace any example.com or yourdomain.com URLs with #{@project.domain} URLs" : ""}
+      3. Frame #{brand_name} as a helpful tool/resource for [article topic]
+      4. Use natural phrasing:
+         - "Tools like #{brand_name} can..."
+         - "#{brand_name} helps by..."
+         - "Use #{brand_name} to..."
+      5. Make it contextually relevant - don't force it
+      6. If the conclusion doesn't have a brand CTA, add one at the end
+
+      EXAMPLE BRAND INTEGRATION:
+      "While traditional validation methods work, tools like #{brand_name} can accelerate
+      the process by [specific benefit]. **[Try #{brand_name}](https://#{@project.domain})
+      to [specific outcome].**"
+
+      Return the full improved article with proper brand integration.
+    PROMPT
+
+    client = Ai::ClientService.for_article_improvement
+    response = client.chat(
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 5000,
+      temperature: 0.7
+    )
+
+    return markdown unless response[:success]
+
+    response[:content].strip
+  rescue => e
+    Rails.logger.error "Pass 6 failed: #{e.message}"
     markdown # Return original on error
   end
 end

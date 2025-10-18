@@ -161,19 +161,27 @@ class AutofillProjectService
 
   def generate_seeds(domain_data, competitors)
     # Use SeedKeywordGenerator in raw domain mode (no project yet)
-    competitor_domains = competitors.map { |c| c[:domain] }
+    # Pass scraped competitor data for richer context
 
-    generator = SeedKeywordGenerator.new(
-      @domain,
-      niche: @niche,
-      competitors: competitor_domains
-    )
+    # Scrape competitors to get their actual content
+    competitor_data = []
+    competitors.first(5).each do |comp|
+      domain = comp[:domain]
+      Rails.logger.info "  Scraping competitor #{domain} for seed generation..."
+      service = DomainAnalysisService.new(domain)
+      data = service.analyze
 
-    # Pass domain title and description to prevent domain name confusion
-    generator.generate_with_competitors(
-      competitor_domains,
-      domain_title: domain_data[:title],
-      domain_description: domain_data[:meta_description]
-    )
+      if data && !data[:error]
+        competitor_data << data
+      end
+
+      sleep 1 # Be nice to servers
+    end
+
+    Rails.logger.info "Scraped #{competitor_data.size} competitors for seed generation"
+
+    # Generate seeds using OpenAI with competitor insights
+    generator = SeedKeywordGenerator.new(@domain, niche: @niche, competitors: [])
+    generator.send(:generate_seeds_via_openai, domain_data, competitor_data)
   end
 end

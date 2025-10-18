@@ -1,11 +1,12 @@
 # app/services/article_outline_service.rb
 # Generates a structured JSON outline for an SEO article based on SERP research
 class ArticleOutlineService
-  def initialize(keyword, serp_data, voice_profile: nil, target_word_count: nil)
+  def initialize(keyword, serp_data, voice_profile: nil, target_word_count: nil, project: nil)
     @keyword = keyword
     @serp_data = serp_data
     @voice_profile = voice_profile
     @target_word_count = target_word_count
+    @project = project
   end
 
   def perform
@@ -63,14 +64,38 @@ class ArticleOutlineService
       "- Link to: \"#{link['target_article_title']}\" (#{link['placement']})"
     }.join("\n")
 
-    cta_preview = cta_placements.take(2).map { |cta|
-      "- \"#{cta['cta_text']}\" → #{cta['placement']}"
-    }.join("\n")
+    # NEW: Get project CTAs instead of hardcoded examples
+    project_ctas = @project&.call_to_actions || []
+    cta_preview = if project_ctas.any?
+      project_ctas.take(3).map { |cta|
+        "- \"#{cta['cta_text']}\" → #{cta['cta_url']} (Placement: #{cta['placement'] || 'flexible'})"
+      }.join("\n")
+    else
+      "No CTAs configured - will use generic calls to action"
+    end
+
+    # NEW: Build brand context for natural integration
+    brand_context = if @project
+      <<~BRAND
+      BRAND CONTEXT (integrate naturally into outline):
+      - Product Name: #{@project.name}
+      - Domain: #{@project.domain}
+      - Position #{@project.name} as a tool/resource that helps with "#{@keyword}"
+      - Include 2-3 natural brand mentions across the article (intro, methods section, conclusion)
+      - Frame it as: "Tools like #{@project.name} can help by..." or "#{@project.name} simplifies [task] by..."
+      - Don't force it - only mention where contextually relevant
+
+      BRAND
+    else
+      ""
+    end
 
     prompt = <<~PROMPT
       You are an expert SEO content strategist creating article outlines.
 
       TARGET KEYWORD: "#{@keyword}"
+
+      #{brand_context}
 
       COMPETITIVE ANALYSIS:
       - Common topics competitors cover: #{common_topics}
@@ -161,14 +186,7 @@ class ArticleOutlineService
             "purpose": "Help readers calculate their potential ROI"
           }
         ],
-        "cta_placements": [
-          {
-            "cta_text": "Start Your Free Trial",
-            "cta_url": "https://example.com/signup",
-            "placement": "after_section_3",
-            "context": "After explaining process, offer tool to help"
-          }
-        ]
+        "cta_placements": #{project_ctas.any? ? project_ctas.to_json : '[]'}
       }
 
       IMPORTANT:

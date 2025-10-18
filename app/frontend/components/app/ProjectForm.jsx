@@ -39,7 +39,7 @@ export default function ProjectForm({
       sitemap_url: project?.sitemap_url || "",
       description: project?.description || "",
       seed_keywords: project?.seed_keywords || [],
-      call_to_actions: project?.call_to_actions || [{ text: "", url: "" }],
+      call_to_actions: project?.call_to_actions?.length > 0 ? project.call_to_actions : [],
       competitors: project?.competitors || []
     }
   })
@@ -177,7 +177,25 @@ export default function ProjectForm({
 
   const handleFormSubmit = (e) => {
     e.preventDefault()
-    onSubmit(data, setData)
+
+    // Filter out empty CTAs before submission
+    const cleanedData = {
+      ...data,
+      project: {
+        ...data.project,
+        call_to_actions: data.project.call_to_actions.filter(
+          cta => cta.text?.trim() !== '' && cta.url?.trim() !== ''
+        ),
+        seed_keywords: data.project.seed_keywords.filter(
+          keyword => keyword?.trim() !== ''
+        ),
+        competitors: data.project.competitors.filter(
+          comp => comp.domain?.trim() !== ''
+        )
+      }
+    }
+
+    onSubmit(cleanedData, setData)
   }
 
   return (
@@ -432,24 +450,24 @@ export default function ProjectForm({
                 </Button>
               </div>
 
-              <div className="space-y-3">
-                {data.project.call_to_actions.map((cta, index) => (
-                  <div key={index} className="flex gap-2 items-start p-3 border rounded-lg bg-muted/20">
-                    <div className="flex-1 space-y-2">
-                      <Input
-                        type="text"
-                        placeholder="CTA Text (e.g., Try it free)"
-                        value={cta.text}
-                        onChange={(e) => updateCallToAction(index, "text", e.target.value)}
-                      />
-                      <Input
-                        type="url"
-                        placeholder="URL (e.g., https://example.com/signup)"
-                        value={cta.url}
-                        onChange={(e) => updateCallToAction(index, "url", e.target.value)}
-                      />
-                    </div>
-                    {data.project.call_to_actions.length > 1 && (
+              {data.project.call_to_actions.length > 0 ? (
+                <div className="space-y-3">
+                  {data.project.call_to_actions.map((cta, index) => (
+                    <div key={index} className="flex gap-2 items-start p-3 border rounded-lg bg-muted/20">
+                      <div className="flex-1 space-y-2">
+                        <Input
+                          type="text"
+                          placeholder="CTA Text (e.g., Try it free)"
+                          value={cta.text}
+                          onChange={(e) => updateCallToAction(index, "text", e.target.value)}
+                        />
+                        <Input
+                          type="url"
+                          placeholder="URL (e.g., https://example.com/signup)"
+                          value={cta.url}
+                          onChange={(e) => updateCallToAction(index, "url", e.target.value)}
+                        />
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"
@@ -459,10 +477,14 @@ export default function ProjectForm({
                       >
                         <X className="h-4 w-4" />
                       </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">
+                  No CTAs yet. Click "Add CTA" to add links for your articles.
+                </p>
+              )}
             </div>
           </CardContent>
         )}

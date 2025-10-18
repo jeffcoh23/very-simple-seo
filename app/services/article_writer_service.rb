@@ -1,11 +1,12 @@
 # app/services/article_writer_service.rb
 # Writes the actual article content based on outline, SERP research, and voice profile
 class ArticleWriterService
-  def initialize(keyword, outline, serp_data, voice_profile: nil)
+  def initialize(keyword, outline, serp_data, voice_profile: nil, project: nil)
     @keyword = keyword
     @outline = outline
     @serp_data = serp_data
     @voice_profile = voice_profile
+    @project = project
   end
 
   def perform
@@ -92,6 +93,8 @@ class ArticleWriterService
 
       #{voice_instructions}
 
+      #{brand_integration_instructions}
+
       TARGET: #{word_count} words
 
       REQUIREMENTS:
@@ -100,6 +103,7 @@ class ArticleWriterService
       - When using examples, include the HOW and WHEN details provided above for tactical depth
       - When citing statistics, use the hyperlinked format shown above (e.g., "According to [CB Insights](url), 42%...")
       - Clearly explain what the article will cover
+      - #{brand_mention_instruction}
       - Write in markdown format
       - DO NOT include the heading (I'll add it)
       - Use natural, conversational tone
@@ -272,6 +276,10 @@ class ArticleWriterService
 
       #{voice_instructions}
 
+      #{brand_integration_instructions}
+
+      #{conclusion_cta_instructions}
+
       TARGET: #{word_count} words
 
       REQUIREMENTS:
@@ -280,6 +288,7 @@ class ArticleWriterService
       - NO vague motivational questions like "Are you ready to take the leap?"
       - NO generic calls to action like "start today"
       - Instead, give SPECIFIC actions: "Book 5 customer interviews by Friday using the script in Section 2"
+      - #{conclusion_brand_instruction}
       - Write in markdown format
       - DO NOT include the heading (I'll add it)
       - Avoid AI clichés like "in conclusion", "to sum up", "at the end of the day"
@@ -402,6 +411,50 @@ class ArticleWriterService
 
       Write in this exact tone and style.
     VOICE
+  end
+
+  # NEW: Brand integration instructions for prompts
+  def brand_integration_instructions
+    return "" unless @project
+
+    <<~BRAND
+      BRAND INTEGRATION:
+      - Product: #{@project.name}
+      - Domain: #{@project.domain}
+      - Mention #{@project.name} 1-2 times in this section where contextually relevant
+      - Frame as: "Tools like #{@project.name} can...", "#{@project.name} helps by...", "Use #{@project.name} to..."
+      - Make it natural - don't force it if it doesn't fit
+    BRAND
+  end
+
+  def brand_mention_instruction
+    @project ? "Consider mentioning #{@project.name} if contextually relevant (1-2x)" : ""
+  end
+
+  # NEW: Conclusion-specific brand CTA instructions
+  def conclusion_cta_instructions
+    return "" unless @project
+
+    project_ctas = @outline&.dig('cta_placements') || []
+    final_cta = project_ctas.last
+
+    if final_cta
+      <<~CTA
+        FINAL CALL TO ACTION (required at end):
+        - End with: **[#{final_cta['cta_text']}](#{final_cta['cta_url']})** and [specific outcome/benefit]
+        - Example: "Start with #{@project.name} to test your idea against AI personas in under an hour, then validate with real customers."
+      CTA
+    else
+      <<~CTA
+        FINAL CALL TO ACTION:
+        - End with mention of #{@project.name} as next step
+        - Example: "Use #{@project.name} to [relevant benefit for #{@keyword}]"
+      CTA
+    end
+  end
+
+  def conclusion_brand_instruction
+    @project ? "End with a call to action mentioning #{@project.name} and its specific benefit" : "End with a clear next step"
   end
 
   # Build context from previous sections (for flow and avoiding repetition)

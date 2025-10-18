@@ -20,7 +20,30 @@ class InternalLinkSuggester
   private
 
   def gather_existing_articles
-    # Get all completed articles for this project
+    # NEW: Use scraped sitemap data if available (REAL URLs from live site)
+    if @project.internal_content_index.present? && @project.internal_content_index['pages'].present?
+      scraped_pages = @project.internal_content_index['pages'] || []
+
+      if scraped_pages.any?
+        Rails.logger.info "Using #{scraped_pages.size} scraped pages for internal links"
+        return scraped_pages.map do |page|
+          {
+            'title' => page['title'],
+            'keyword' => extract_keyword_from_url(page['url']),
+            'url' => page['url'],  # REAL URL like /blog/validate-ideas
+            'meta_description' => page['meta_description'],
+            'word_count' => estimate_word_count(page['summary']),
+            'topics' => page['headings'] || []
+          }
+        end
+      end
+    end
+
+    # FALLBACK: Use database articles (generates /articles/:id URLs)
+    # NOTE: These URLs may not exist on the actual site!
+    Rails.logger.warn "No scraped content found - falling back to database articles"
+    Rails.logger.warn "WARNING: Generated URLs may be broken. Run SitemapScraperService to fix."
+
     articles = @project.articles.where(status: :completed).order(created_at: :desc).limit(50)
 
     articles.map do |article|
@@ -97,5 +120,19 @@ class InternalLinkSuggester
     # This assumes articles are at /articles/:id or similar
     # Adjust based on your routing
     "/articles/#{article.id}"
+  end
+
+  # NEW: Helper methods for scraped content
+  def extract_keyword_from_url(url)
+    # Extract keyword from URL slug
+    # e.g., "/blog/validate-business-ideas" → "validate business ideas"
+    slug = url.split('/').last
+    slug&.gsub('-', ' ')&.gsub('_', ' ') || ''
+  end
+
+  def estimate_word_count(summary)
+    # Rough estimate from summary
+    return 0 if summary.blank?
+    (summary.split.size * 8) # Assume summary is ~12% of content
   end
 end

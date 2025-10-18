@@ -75,7 +75,7 @@ class KeywordResearchService
     if @project.competitors.any?
       Rails.logger.info "Using #{@project.competitors.count} user-provided competitors"
       competitor_candidates = @project.competitors.map do |comp|
-        { domain: comp.domain, title: comp.name, description: "", source: "manual" }
+        { domain: comp.domain, title: comp.domain, description: "", source: "manual" }
       end
     else
       # Build search query based on domain content
@@ -369,6 +369,7 @@ class KeywordResearchService
 
   # Build semantic "fingerprint" of domain for similarity matching
   # ENHANCED: Creates rich, detailed context for better semantic filtering
+  # IMPROVED: Filters out low-quality seed keywords to prevent context pollution
   def build_domain_context
     domain_data = @project.domain_analysis
 
@@ -421,10 +422,14 @@ class KeywordResearchService
       context_parts << "Site sections: #{domain_data[:sitemap_keywords].first(10).join(', ')}"
     end
 
-    # 5. Seed keywords (CRITICAL - these define the semantic space)
+    # 5. IMPROVED: Filter seed keywords to include only high-quality ones
+    # This prevents one bad seed from polluting the semantic context
     if @keyword_research&.seed_keywords&.any?
-      # Include ALL seed keywords, not just first 10 - they're the ground truth
-      context_parts << "Target keywords: #{@keyword_research.seed_keywords.join(', ')}"
+      filtered_seeds = filter_quality_seeds(@keyword_research.seed_keywords, domain_data)
+      if filtered_seeds.any?
+        context_parts << "Target keywords: #{filtered_seeds.join(', ')}"
+        Rails.logger.info "Using #{filtered_seeds.size}/#{@keyword_research.seed_keywords.size} high-quality seeds for context"
+      end
     end
 
     # 6. Project metadata as fallback
@@ -437,6 +442,39 @@ class KeywordResearchService
     context = context_parts.compact.join(". ")
     Rails.logger.info "Built domain context (#{context.length} chars): #{context.first(200)}..."
     context
+  end
+
+  # Filter seed keywords to remove outliers that don't match the core business
+  # This prevents bad seeds from poisoning the semantic filter
+  def filter_quality_seeds(seeds, domain_data)
+    return seeds if seeds.size <= 3  # If very few seeds, use them all
+
+    # Build a "core context" from just domain data (no seeds)
+    core_context_parts = []
+    core_context_parts << domain_data[:title] if domain_data[:title].present?
+    core_context_parts << domain_data[:meta_description] if domain_data[:meta_description].present?
+    core_context_parts << @project.description if @project.description.present?
+
+    core_context = core_context_parts.compact.join(". ")
+    return seeds if core_context.blank?  # No domain context available
+
+    # Calculate similarity of each seed to core context
+    similarity_service = SemanticSimilarityService.new
+    seed_scores = similarity_service.batch_similarity(core_context, seeds)
+
+    # Sort by similarity and take top 80% (filters out bottom 20% outliers)
+    sorted_seeds = seed_scores.sort_by { |s| -s[:similarity] }
+    cutoff_index = (seeds.size * 0.8).ceil
+
+    filtered = sorted_seeds.first(cutoff_index).map { |s| s[:keyword] }
+
+    # Log any rejected seeds
+    rejected = seeds - filtered
+    if rejected.any?
+      Rails.logger.info "Filtered out #{rejected.size} low-quality seeds from context: #{rejected.join(', ')}"
+    end
+
+    filtered
   end
 
   # Filter keywords by semantic similarity to domain context
