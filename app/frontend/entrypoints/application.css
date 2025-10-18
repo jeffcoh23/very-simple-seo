@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* VerySimpleSEO Design System - Organic Growth Palette */
 /* See docs/DESIGN_SYSTEM.md for full documentation */

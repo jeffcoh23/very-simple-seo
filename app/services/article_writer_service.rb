@@ -20,6 +20,7 @@ class ArticleWriterService
     @written_sections = [intro]
     @used_examples = extract_used_examples(intro)
     @used_statistics = extract_used_statistics(intro)
+    @mentioned_tools = extract_mentioned_tools(intro) # NEW: Track tools to prevent duplicates
 
     # Write each section
     sections = []
@@ -35,6 +36,7 @@ class ArticleWriterService
         @written_sections << section_content
         @used_examples.concat(extract_used_examples(section_content))
         @used_statistics.concat(extract_used_statistics(section_content))
+        @mentioned_tools.concat(extract_mentioned_tools(section_content)) # NEW: Track tools
       end
     end
 
@@ -82,14 +84,29 @@ class ArticleWriterService
         base
       }.join("\n")}
 
-      AVAILABLE STATISTICS (use 1-2 if relevant):
-      #{statistics.take(3).map { |stat|
+      AVAILABLE STATISTICS (use 1-2 if relevant - MUST include citation numbers):
+      #{statistics.take(3).map.with_index { |stat, i|
+        citation_num = i + 1
         if stat['source_url'].present?
-          "- #{stat['stat']} ([#{stat['source']}](#{stat['source_url']}))"
+          "- [#{citation_num}] #{stat['stat']} (Source: #{stat['source']})"
         else
           "- #{stat['stat']} (#{stat['source']})"
         end
       }.join("\n")}
+
+      CITATION FORMAT (CRITICAL REQUIREMENT):
+
+      WHEN using a statistic from the list above:
+      1. Place citation number at END of sentence: "42% of startups fail due to no market need [1]."
+      2. Use ONLY the bracketed number: [1], [2], [3]
+      3. DO NOT add source name after citation (it's in Sources section)
+
+      EXAMPLES:
+      - ✅ CORRECT: "According to CB Insights research, 42% of startups fail due to no market need [1]."
+      - ❌ WRONG: "42% of startups fail (CB Insights)"
+      - ❌ WRONG: "42% of startups fail" (missing citation)
+
+      REMEMBER: Every citation [1], [2], [3] will be matched to the Sources section at end of article
 
       #{voice_instructions}
 
@@ -97,17 +114,29 @@ class ArticleWriterService
 
       TARGET: #{word_count} words
 
+      ANTI-PATTERNS (DO NOT DO):
+      ❌ Generic fluff: "In today's digital landscape", "In the modern era"
+      ❌ Missing citation: "42% of startups fail" (must add [1])
+      ❌ Wrong citation: "42% fail (CB Insights)" (must be "42% fail [1]")
+      ❌ No brand: Writing entire intro without mentioning #{@project&.name}
+      ❌ Vague hook: "Are you wondering about...?" (be specific)
+
+      REQUIRED PATTERNS:
+      ✅ Strong hook: "Dropbox got 75,000 signups in 2008—before writing any code."
+      ✅ Citations: "42% of startups fail [1]"
+      ✅ Brand: "#{@project&.name} helps by..."
+      ✅ Specific value: Tell readers exactly what they'll learn
+
       REQUIREMENTS:
-      - Hook reader in first sentence
+      - Hook reader in first sentence with specific example or stat
       - Use a real example or statistic to establish credibility
       - When using examples, include the HOW and WHEN details provided above for tactical depth
-      - When citing statistics, use the hyperlinked format shown above (e.g., "According to [CB Insights](url), 42%...")
+      - When citing statistics, use format shown above: "42% fail [1]"
       - Clearly explain what the article will cover
-      - #{brand_mention_instruction}
+      - MUST mention #{@project&.name} at least once
       - Write in markdown format
       - DO NOT include the heading (I'll add it)
       - Use natural, conversational tone
-      - Avoid AI clichés like "in today's digital landscape" or "in conclusion"
     PROMPT
 
     client = Ai::ClientService.for_article_writing
@@ -139,8 +168,7 @@ class ArticleWriterService
     key_points = section_outline['key_points'] || []
     subsections = section_outline['subsections'] || []
 
-    # NEW: Get internal links and CTAs for this section
-    internal_links = section_outline['internal_links'] || []
+    # Get CTAs for this section
     section_ctas = (@outline['cta_placements'] || []).select do |cta|
       cta['placement']&.include?("section_#{section_index + 1}") ||
       cta['placement']&.include?("after_section_#{section_index + 1}")
@@ -158,10 +186,10 @@ class ArticleWriterService
     tables_text = build_tables_prompt(comparison_tables)
     guides_text = build_guides_prompt(step_by_step_guides)
     resources_text = build_resources_prompt(downloadable_resources)
-    tools_text = build_tools_prompt(recommended_tools)
+    tools_text = build_tools_prompt(recommended_tools, @mentioned_tools || []) # Pass already-mentioned tools
 
-    # NEW: Build internal links and CTAs prompts
-    internal_links_text = build_internal_links_prompt(internal_links)
+    # NEW: Build internal links (from scraped sitemap) and CTAs prompts
+    internal_links_text = build_internal_links_prompt([]) # Scraped pages fetched inside method
     ctas_text = build_ctas_prompt(section_ctas)
 
     prompt = <<~PROMPT
@@ -185,14 +213,27 @@ class ArticleWriterService
         base
       }.join("\n")}
 
-      AVAILABLE STATISTICS (use 2-3 if relevant):
-      #{available_statistics.take(5).map { |stat|
+      AVAILABLE STATISTICS (use 2-3 if relevant - MUST include citation numbers):
+      #{available_statistics.take(5).map.with_index { |stat, i|
+        citation_num = (@used_statistics.size + i + 1) # Continue numbering from previous sections
         if stat['source_url'].present?
-          "- #{stat['stat']} ([#{stat['source']}](#{stat['source_url']}))"
+          "- [#{citation_num}] #{stat['stat']} (Source: #{stat['source']})"
         else
           "- #{stat['stat']} (#{stat['source']})"
         end
       }.join("\n")}
+
+      CITATION FORMAT (CRITICAL REQUIREMENT):
+
+      WHEN using a statistic:
+      1. Place [#{(@used_statistics.size + 1)}] at END of sentence: "38% skip validation [#{(@used_statistics.size + 1)}]."
+      2. Use ONLY the bracketed number, NOT source name
+      3. Sources listed at end of article
+
+      EXAMPLES:
+      - ✅ CORRECT: "Research shows 38% of founders skip validation entirely [#{(@used_statistics.size + 1)}]."
+      - ❌ WRONG: "38% skip validation (Statista)"
+      - ❌ WRONG: "38% skip validation" (missing citation)
 
       #{visuals_text}
 
@@ -218,23 +259,33 @@ class ArticleWriterService
 
       TARGET: #{word_count} words
 
+      ANTI-PATTERNS (DO NOT DO):
+      ❌ Generic fluff: "It's important to note", "Remember that"
+      ❌ Vague examples: "Dropbox validated their idea" (missing HOW/WHEN details)
+      ❌ Missing citations: "42% of startups fail" (must add [#{(@used_statistics.size + 1)}])
+      ❌ No brand: Writing entire section without mentioning #{@project&.name}
+      ❌ Tool spam: "Use Typeform, Google Forms, SurveyMonkey, or..." (max 1 tool!)
+      ❌ Unlinked CTA: "Start your free trial" (must hyperlink!)
+      ❌ Repeating content: Using same examples/stats from previous sections
+
+      REQUIRED PATTERNS:
+      ✅ Specific examples: "Dropbox posted 3-minute demo on Hacker News in 2008, got 75,000 signups"
+      ✅ Citations: "42% fail [#{(@used_statistics.size + 1)}]"
+      ✅ Brand: "#{@project&.name} streamlines..."
+      ✅ Max 1 tool: "Tools like Typeform can help" (not "Typeform, Google Forms, etc.")
+      ✅ Hyperlinked CTAs: **[CTA text](url)**
+
       REQUIREMENTS:
       - Write in markdown format
       - Include the H2 heading: ## #{heading}
       - Use H3 headings (###) for subsections
       - DO NOT repeat any examples or statistics already used in previous sections
-      - Reference previous sections naturally if relevant (e.g., "As mentioned earlier...")
       - Use DIFFERENT examples from the available list above
       - When using examples, include the HOW and WHEN details provided above for tactical depth
-      - GOOD: "Dropbox validated demand in 2008 by posting a 3-minute demo on Hacker News—before writing any code—and got 75,000 signups overnight"
-      - BAD: "Dropbox validated their idea with a demo video"
-      - When citing statistics, ALWAYS use the hyperlinked format shown above (e.g., "According to [CB Insights](url), 42%...")
+      - When citing statistics, use format shown above
       - Include bullet points or numbered lists where appropriate
       - Keep paragraphs short (2-4 sentences)
-      - Use natural, conversational tone
-      - Avoid AI clichés like "it's important to note" or "remember"
       - Make it actionable and specific with HOW details, not just WHAT
-      - Embed visuals, tables, guides, resources, and tools when HIGHLY relevant to this section
       - Include internal links naturally in context (not forced or awkward)
       - Place CTAs at the END of this section if provided (not in the middle)
     PROMPT
@@ -282,16 +333,27 @@ class ArticleWriterService
 
       TARGET: #{word_count} words
 
+      ANTI-PATTERNS (DO NOT DO):
+      ❌ Vague summary: "We covered a lot today"
+      ❌ Generic CTA: "Start your journey today", "Take the first step"
+      ❌ Motivational fluff: "Are you ready to take the leap?"
+      ❌ AI clichés: "In conclusion", "To sum up", "At the end of the day"
+      ❌ No brand: Ending without mentioning #{@project&.name}
+      ❌ Unlinked CTA: "Start your free trial" (must hyperlink!)
+
+      REQUIRED PATTERNS:
+      ✅ Specific takeaways: "1. Run 10 interviews by Friday, 2. Build landing page, 3. Get 5 to pay $1"
+      ✅ Concrete next step: "Book your first 5 interviews by Friday using the script in Section 2"
+      ✅ Brand + CTA: "Use #{@project&.name} to..." with hyperlinked CTA
+      ✅ Hyperlinked CTAs: **[CTA text](url)**
+
       REQUIREMENTS:
       - Start with a strong summary of the 3 MOST IMPORTANT actionable takeaways (be specific, not vague)
       - Provide ONE concrete next step readers can take immediately (not generic "take action")
-      - NO vague motivational questions like "Are you ready to take the leap?"
-      - NO generic calls to action like "start today"
-      - Instead, give SPECIFIC actions: "Book 5 customer interviews by Friday using the script in Section 2"
-      - #{conclusion_brand_instruction}
+      - Give SPECIFIC actions: "Book 5 customer interviews by Friday using the script in Section 2"
+      - MUST mention #{@project&.name} and include hyperlinked CTA
       - Write in markdown format
       - DO NOT include the heading (I'll add it)
-      - Avoid AI clichés like "in conclusion", "to sum up", "at the end of the day"
 
       GOOD CONCLUSION EXAMPLE:
       "Validating your business idea comes down to three actions:
@@ -390,6 +452,10 @@ class ArticleWriterService
     # Introduction
     parts << "#{intro}\n"
 
+    # Table of Contents (SEO best practice)
+    toc = generate_table_of_contents
+    parts << "\n#{toc}\n" if toc.present?
+
     # Sections (already include their own headings)
     sections.each do |section|
       parts << "\n#{section}\n"
@@ -398,6 +464,10 @@ class ArticleWriterService
     # Conclusion
     parts << "\n## Conclusion\n"
     parts << "#{conclusion}\n"
+
+    # Sources section (SEO best practice - builds E-E-A-T)
+    sources = generate_sources_section
+    parts << "\n#{sources}\n" if sources.present?
 
     parts.join("\n")
   end
@@ -418,12 +488,14 @@ class ArticleWriterService
     return "" unless @project
 
     <<~BRAND
-      BRAND INTEGRATION:
+      BRAND INTEGRATION (REQUIRED):
       - Product: #{@project.name}
       - Domain: #{@project.domain}
-      - Mention #{@project.name} 1-2 times in this section where contextually relevant
-      - Frame as: "Tools like #{@project.name} can...", "#{@project.name} helps by...", "Use #{@project.name} to..."
-      - Make it natural - don't force it if it doesn't fit
+      - MUST mention #{@project.name} at least 1-2 times in this section
+      - Natural placements: "Tools like #{@project.name}", "#{@project.name} helps by", "Use #{@project.name} to"
+      - ❌ WRONG: Skip mentioning our product entirely
+      - ✅ CORRECT: "#{@project.name} streamlines this process by..."
+      - This is OUR article promoting OUR product - brand mentions are mandatory, not optional
     BRAND
   end
 
@@ -624,75 +696,105 @@ class ArticleWriterService
   def build_resources_prompt(resources)
     return "" if resources.empty?
 
-    parts = []
-    parts << "FREE RESOURCES AVAILABLE:"
+    # LIMIT: Max 2 resources
+    limited_resources = resources.take(2)
 
-    resources.each_with_index do |resource, i|
+    parts = []
+    parts << "EXTERNAL RESOURCES (use very sparingly):"
+
+    limited_resources.each_with_index do |resource, i|
       parts << "#{i + 1}. #{resource['title']} (#{resource['type']})"
       parts << "   #{resource['description']}"
-      parts << "   URL: #{resource['url']}"
     end
 
     parts << ""
-    parts << "RESOURCE USAGE GUIDELINES:"
-    parts << "- Link to 1-2 relevant free resources when they add value"
-    parts << "- Format: **[Resource Title](url)**"
-    parts << "- Explain WHAT the resource is and WHY it's useful"
-    parts << "- Add context: 'This Google Sheets template includes...'"
-    parts << "- Use clear CTA: 'Download the [X]', 'Get the free [Y]'"
-    parts << "- Only link to resources that readers can immediately use"
+    parts << "RESOURCE MENTION RULES (IMPORTANT):"
+    parts << "- DO NOT link to external templates/resources from competitors"
+    parts << "- These are provided for awareness only - DO NOT promote them"
+    parts << "- Instead, focus on teaching the concept directly in your content"
+    parts << "- If resources would be helpful, suggest readers create their own based on the principles you explain"
+    parts << "- NEVER say 'Download from [External Site]' - that promotes competitors"
+    parts << "- Keep focus on #{@project&.name || 'our solution'} when relevant"
 
     parts.join("\n")
   end
 
   # Build prompt text for recommended tools
-  def build_tools_prompt(tools)
+  def build_tools_prompt(tools, already_mentioned = [])
     return "" if tools.empty?
 
-    parts = []
-    parts << "RECOMMENDED TOOLS:"
+    # Filter out already-mentioned tools
+    available_tools = tools.reject { |t| already_mentioned.include?(t['tool_name']) }
 
-    tools.each_with_index do |tool, i|
+    # Limit to 2 tools max per section
+    limited_tools = available_tools.take(2)
+
+    return "" if limited_tools.empty?
+
+    parts = []
+    parts << "TOOLS AVAILABLE (VERY LIMITED USE):"
+    parts << ""
+
+    limited_tools.each_with_index do |tool, i|
       parts << "#{i + 1}. #{tool['tool_name']} - #{tool['category']}"
       parts << "   Use case: #{tool['use_case']}"
-      parts << "   Pricing: #{tool['pricing']}"
-      parts << "   Why: #{tool['why_recommended']}"
       parts << "   URL: #{tool['url']}"
+      parts << ""
     end
 
-    parts << ""
-    parts << "TOOL USAGE GUIDELINES:"
-    parts << "- Mention 2-3 tools if highly relevant to this section"
-    parts << "- Format: **[Tool Name](url)** - Brief description"
-    parts << "- Include pricing context when relevant"
-    parts << "- Explain specific use case for this topic"
-    parts << "- Don't list all tools - only mention most relevant ones"
+    if already_mentioned.any?
+      parts << "TOOLS ALREADY MENTIONED IN PREVIOUS SECTIONS (DO NOT REPEAT):"
+      parts << already_mentioned.join(", ")
+      parts << ""
+    end
+
+    parts << "TOOL MENTION RULES (STRICT LIMITS):"
+    parts << "- ✅ ALLOWED: Mention maximum 1 tool from list above (or 0 if not relevant)"
+    parts << "- ❌ FORBIDDEN: Mentioning same tool twice in article"
+    parts << "- ❌ FORBIDDEN: Creating comparison tables with multiple tools"
+    parts << "- ❌ FORBIDDEN: Listing multiple tools ('Use Typeform, Google Forms, or...')"
+    parts << "- PRIORITY: Focus on #{@project&.name || 'our solution'} over third-party tools"
+    parts << "- FORMAT: Brief mention only - 'Tools like Typeform can help with surveys'"
 
     parts.join("\n")
   end
 
   # Build prompt text for internal links
   def build_internal_links_prompt(internal_links)
-    return "" if internal_links.empty?
+    # NEW: Use scraped sitemap pages instead of database articles
+    scraped_pages = get_scraped_pages
+    return "" if scraped_pages.empty?
 
     parts = []
-    parts << "INTERNAL LINKS TO INCLUDE:"
+    parts << "INTERNAL PAGES AVAILABLE FOR LINKING:"
 
-    internal_links.each_with_index do |link, i|
-      parts << "#{i + 1}. Link text: \"#{link['anchor_text']}\""
-      parts << "   Target article: #{link['target_article_title']}"
-      parts << "   Context: #{link['context']}"
+    scraped_pages.take(5).each_with_index do |page, i|
+      parts << "#{i + 1}. #{page['title']}"
+      parts << "   URL: #{page['url']}"
+      parts << "   Description: #{page['meta_description'][0..100]}..." if page['meta_description'].present?
     end
 
     parts << ""
-    parts << "INTERNAL LINKING GUIDELINES:"
-    parts << "- Weave internal links naturally into the text"
-    parts << "- Format: [anchor text](/articles/target-slug)"
-    parts << "- DON'T force links awkwardly - make them contextually relevant"
-    parts << "- Place links where they provide value to the reader"
-    parts << "- Example: 'For more on customer interviews, see our guide on [interview best practices](/articles/interview-guide).'"
+    parts << "INTERNAL LINKING RULES (IMPORTANT):"
+    parts << "- Link to 2-3 of these pages NATURALLY where contextually relevant"
+    parts << "- Use REAL URLs provided above (not /articles/:id)"
+    parts << "- Format: [descriptive anchor text](actual-url)"
+    parts << "- Example: 'Check our [pricing plans](#{scraped_pages.first['url']}) for details.'"
+    parts << "- Make links helpful to readers, not forced"
+    parts << "- These are OUR pages - prioritize linking to them over external sites"
 
     parts.join("\n")
+  end
+
+  # Get scraped pages from project's sitemap data
+  def get_scraped_pages
+    return [] unless @project&.internal_content_index.present?
+
+    pages = @project.internal_content_index['pages'] || []
+    return [] if pages.empty?
+
+    # Return scraped pages (already includes title, url, meta_description)
+    pages
   end
 
   # Build prompt text for CTAs
@@ -700,22 +802,130 @@ class ArticleWriterService
     return "" if ctas.empty?
 
     parts = []
-    parts << "CALL-TO-ACTION (CTA) TO INCLUDE:"
+    parts << "CALL-TO-ACTION (CRITICAL - MUST HYPERLINK):"
+    parts << ""
 
     ctas.each_with_index do |cta, i|
-      parts << "#{i + 1}. CTA: \"#{cta['cta_text']}\""
+      parts << "#{i + 1}. Text: \"#{cta['cta_text']}\""
       parts << "   URL: #{cta['cta_url']}"
+      parts << "   REQUIRED FORMAT: **[#{cta['cta_text']}](#{cta['cta_url']})**"
       parts << "   Context: #{cta['context']}"
+      parts << ""
     end
 
-    parts << ""
-    parts << "CTA PLACEMENT GUIDELINES:"
+    parts << "CTA PLACEMENT RULES (NON-NEGOTIABLE):"
     parts << "- Place CTA at the END of this section (after all content)"
-    parts << "- Add brief context before CTA (why it's relevant)"
-    parts << "- Format as: **[CTA Text](url)**"
-    parts << "- Example: 'Ready to validate your idea? **[Start your free trial](url)** and get instant feedback.'"
-    parts << "- Keep it natural and relevant to what was just discussed"
+    parts << "- MUST use EXACT markdown link format shown above"
+    parts << "- ❌ WRONG: '#{ctas.first['cta_text']}' (plain text, no link)"
+    parts << "- ✅ CORRECT: '**[#{ctas.first['cta_text']}](#{ctas.first['cta_url']})**'"
+    parts << "- Example: 'Ready to validate your idea? **[#{ctas.first['cta_text']}](#{ctas.first['cta_url']})** and get instant feedback.'"
+    parts << "- The CTA text MUST be a clickable hyperlink, not plain text"
 
     parts.join("\n")
+  end
+
+  # Generate Table of Contents from outline sections
+  def generate_table_of_contents
+    sections = @outline['sections'] || []
+
+    # Only generate TOC if we have 3+ sections (excluding intro/conclusion)
+    content_sections = sections.reject do |s|
+      heading = s['heading']&.downcase || ''
+      heading.include?('introduction') || heading.include?('conclusion')
+    end
+
+    return "" if content_sections.size < 3
+
+    toc_parts = []
+    toc_parts << "## Table of Contents\n"
+
+    content_sections.each_with_index do |section, i|
+      heading = section['heading']
+      # Create anchor (lowercase, hyphens, no special chars)
+      anchor = heading.downcase
+                      .gsub(/[^a-z0-9\s-]/, '')
+                      .gsub(/\s+/, '-')
+                      .gsub(/-+/, '-')
+                      .gsub(/^-|-$/, '')
+
+      toc_parts << "#{i + 1}. [#{heading}](##{anchor})"
+    end
+
+    # Add FAQ if present
+    if @outline['has_faq_section']
+      toc_parts << "#{content_sections.size + 1}. [Frequently Asked Questions](#frequently-asked-questions)"
+    end
+
+    toc_parts << "" # Empty line after TOC
+    toc_parts.join("\n")
+  end
+
+  # Generate Sources section from SERP data
+  def generate_sources_section
+    sources = []
+    citation_counter = 0
+
+    # Collect sources from statistics
+    if @serp_data['statistics'].is_a?(Array)
+      @serp_data['statistics'].each do |stat|
+        if stat['source_url'].present? && stat['source'].present?
+          citation_counter += 1
+          sources << {
+            number: citation_counter,
+            title: stat['source'],
+            url: stat['source_url']
+          }
+        end
+      end
+    end
+
+    # Collect sources from examples
+    if @serp_data['detailed_examples'].is_a?(Array)
+      @serp_data['detailed_examples'].each do |example|
+        if example['source_url'].present?
+          # Avoid duplicates
+          unless sources.any? { |s| s[:url] == example['source_url'] }
+            citation_counter += 1
+            sources << {
+              number: citation_counter,
+              title: example['company'] || example['source'] || 'Source',
+              url: example['source_url']
+            }
+          end
+        end
+      end
+    end
+
+    return "" if sources.empty?
+
+    sources_parts = []
+    sources_parts << "## Sources\n"
+
+    sources.each do |source|
+      sources_parts << "[#{source[:number]}] #{source[:title]}"
+      sources_parts << "    #{source[:url]}\n"
+    end
+
+    sources_parts.join("\n")
+  end
+
+  # NEW: Extract tool names mentioned in content to prevent duplicates
+  def extract_mentioned_tools(content)
+    return [] if content.blank?
+
+    # List of common tools to track
+    known_tools = [
+      'Typeform', 'Google Forms', 'SurveyMonkey', 'Optimizely',
+      'Mixpanel', 'Google Analytics', 'Unbounce', 'Hotjar',
+      'Mailchimp', 'ConvertKit', 'HubSpot', 'Intercom',
+      'Calendly', 'Zoom', 'Loom', 'Figma', 'Canva'
+    ]
+
+    mentioned = []
+    known_tools.each do |tool|
+      mentioned << tool if content.include?(tool)
+    end
+
+    mentioned
   end
 end

@@ -1,15 +1,19 @@
 # app/services/ai/client_service.rb
 class Ai::ClientService
   # Model configuration for different services
-  # Using gpt-4o-mini for everything as it's cheaper than gemini-2.5-flash
+  # Using Claude Haiku 4.5 for article generation (better instruction following)
+  # Using gpt-4o-mini for simpler analysis tasks
   MODELS = {
+    # Article generation: Claude Haiku 4.5 (excellent at following complex instructions)
+    outline_generation: { provider: "anthropic", model: "claude-haiku-4.5" },
+    article_writing: { provider: "anthropic", model: "claude-haiku-4.5" },
+    article_improvement: { provider: "anthropic", model: "claude-haiku-4.5" },
+
+    # Simple analysis tasks: GPT-4o-mini (cheaper)
     keyword_analysis: { provider: "openai", model: "gpt-4o-mini" },
-    outline_generation: { provider: "openai", model: "gpt-4o-mini" },
-    article_writing: { provider: "openai", model: "gpt-4o-mini" },
-    article_improvement: { provider: "openai", model: "gpt-4o-mini" },
     serp_analysis: { provider: "openai", model: "gpt-4o-mini" },
 
-    # NEW: Grounding research providers
+    # Grounding research providers
     grounding_research: { provider: "gemini", model: "gemini-2.5-flash" },
     perplexity_search: { provider: "perplexity", model: "sonar" },
     openai_search: { provider: "openai", model: "gpt-4o" } # Future
