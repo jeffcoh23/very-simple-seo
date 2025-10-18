@@ -7,8 +7,6 @@ class SerpGroundingResearchService
   def initialize(keyword, project: nil)
     @keyword = keyword
     @project = project
-    @grounding = GoogleGroundingService.new(provider: :gemini_grounding)
-    # To switch providers: GoogleGroundingService.new(provider: :perplexity)
   end
 
   def perform
@@ -17,35 +15,238 @@ class SerpGroundingResearchService
     # Build context about project's existing content
     internal_context = build_internal_context
 
-    prompt = build_comprehensive_research_prompt(internal_context)
-    json_structure = build_json_structure_hint
+    # Make 3 focused research calls instead of 1 overwhelming call
+    examples_data = fetch_examples_and_case_studies
+    stats_data = fetch_statistics_and_data
+    content_data = fetch_content_elements(internal_context)
 
-    result = @grounding.search_json(
-      prompt,
-      json_structure_hint: json_structure,
-      max_tokens: 16000
-    )
+    # Merge all results
+    serp_data = merge_research_data(examples_data, stats_data, content_data)
 
-    unless result[:success]
-      Rails.logger.error "Grounding search failed: #{result[:error]}"
-      return { data: nil, cost: 0.05 }
-    end
-
-    # Transform grounding data to match current SERP data structure
-    serp_data = transform_grounding_to_serp_format(result[:data], result[:grounding_metadata])
+    # Validate and clean results
+    serp_data = validate_and_clean_results(serp_data)
 
     Rails.logger.info "Grounding research complete:"
     Rails.logger.info "  - Examples: #{serp_data['detailed_examples']&.size || 0}"
     Rails.logger.info "  - Statistics: #{serp_data['statistics']&.size || 0}"
     Rails.logger.info "  - FAQs: #{serp_data['faqs']&.size || 0}"
-    Rails.logger.info "  - Internal Links: #{serp_data['internal_link_opportunities']&.size || 0}"
-    Rails.logger.info "  - CTAs: #{serp_data['cta_placements']&.size || 0}"
-    Rails.logger.info "  - Sources: #{result[:grounding_metadata][:sources_count]}"
+    Rails.logger.info "  - Tools: #{serp_data['recommended_tools']&.size || 0}"
 
-    { data: serp_data, cost: 0.05 } # Estimate: much cheaper than 9 AI calls
+    { data: serp_data, cost: 0.15 } # 3 API calls instead of 1
   end
 
   private
+
+  # Focused call #1: Real-world examples and case studies
+  def fetch_examples_and_case_studies
+    prompt = <<~PROMPT
+      Search the web for 8-10 REAL examples of companies/people succeeding with "#{@keyword}".
+
+      For EACH example, you MUST include:
+      - company: Company or person name
+      - what_they_did: The tactic/strategy (1-2 sentences)
+      - how_they_did_it: SPECIFIC steps, tools, channels (3-4 sentences with HOW details)
+      - timeline: When they did it (year, duration)
+      - outcome: Quantified results (numbers, metrics)
+      - source_url: EXACT URL where you found this (REQUIRED)
+
+      CRITICAL REQUIREMENTS:
+      - Include tactical HOW details (tools, platforms, exact steps)
+      - Every example MUST have a source_url
+      - Use INLINE CITATIONS [1], [2], [3] for each fact
+      - NO placeholder/generic examples
+      - Focus on verified, recent examples (last 5 years)
+
+      Return ONLY valid JSON array:
+      [
+        {
+          "company": "Dropbox",
+          "what_they_did": "Validated demand before building product",
+          "how_they_did_it": "Created 3-minute demo video showing product concept, posted on Hacker News with email signup form, drove traffic through targeted tech community outreach",
+          "timeline": "2008, 4 months before first beta release",
+          "outcome": "75,000 beta signups, 15% conversion to paid tier at launch",
+          "source_url": "https://techcrunch.com/2011/10/19/dropbox-minimal-viable-product/"
+        }
+      ]
+    PROMPT
+
+    call_grounding_api(prompt, "examples")
+  end
+
+  # Focused call #2: Statistics and hard data
+  def fetch_statistics_and_data
+    prompt = <<~PROMPT
+      Search the web for 12-15 CURRENT, AUTHORITATIVE statistics about "#{@keyword}".
+
+      For EACH statistic, you MUST include:
+      - stat: The exact statistic with number
+      - source: Organization/company name
+      - source_url: Direct link to research (REQUIRED)
+      - year: Publication year
+      - context: Why this matters (1 sentence)
+
+      CRITICAL REQUIREMENTS:
+      - Use INLINE CITATIONS [1], [2], [3] for each stat
+      - Every stat MUST have source_url
+      - Prioritize recent data (last 2-3 years)
+      - Include authoritative sources (research firms, industry reports)
+      - NO made-up statistics
+
+      Return ONLY valid JSON array:
+      [
+        {
+          "stat": "42% of startups fail due to no market need",
+          "source": "CB Insights",
+          "source_url": "https://www.cbinsights.com/research/startup-failure-post-mortem/",
+          "year": "2023",
+          "context": "Primary reason for startup failure across 100+ post-mortems"
+        }
+      ]
+    PROMPT
+
+    call_grounding_api(prompt, "statistics")
+  end
+
+  # Focused call #3: Content elements (FAQs, tools, guides)
+  def fetch_content_elements(internal_context)
+    internal_section = internal_context ? build_internal_linking_prompt(internal_context) : ""
+
+    prompt = <<~PROMPT
+      Search the web for content elements related to "#{@keyword}".
+
+      ## 1. FREQUENTLY ASKED QUESTIONS (8-10 questions)
+      Find real questions people ask. For each:
+      - question: Exact question
+      - answer: Comprehensive answer (3-5 sentences)
+      - source_url: URL if answer contains specific claims
+
+      ## 2. RECOMMENDED TOOLS (6-8 tools)
+      Find specific tools mentioned for this topic. For each:
+      - tool_name: Name
+      - category: Type of tool
+      - use_case: How it's used
+      - pricing: Tier summary
+      - url: Tool website
+      - why_recommended: 1 sentence
+
+      ## 3. STEP-BY-STEP GUIDES (3-5 guides)
+      Find actionable frameworks. For each:
+      - title: Guide title
+      - steps: Specific actions (array of 5-8 steps)
+      - outcome: Expected result
+      - source_url: Where found
+
+      ## 4. COMPARISON TABLES (2-3 tables)
+      Create or find comparison tables. For each:
+      - title: Table title
+      - headers: Column names
+      - rows: Data rows
+      - source_url: Data source
+
+      #{internal_section}
+
+      CRITICAL REQUIREMENTS:
+      - Use INLINE CITATIONS [1], [2], [3] for all facts
+      - Every item with facts MUST have source_url
+      - Focus on practical, actionable content
+      - NO generic advice
+
+      Return ONLY valid JSON object with these keys:
+      {
+        "faqs": [...],
+        "recommended_tools": [...],
+        "step_by_step_guides": [...],
+        "comparison_tables": [...],
+        "internal_link_opportunities": [...],
+        "cta_placements": [...]
+      }
+    PROMPT
+
+    call_grounding_api(prompt, "content_elements")
+  end
+
+  def call_grounding_api(prompt, request_type)
+    Rails.logger.info "Grounding API call: #{request_type}"
+
+    begin
+      # Call Gemini with google_search tool and INLINE CITATIONS enabled
+      chat = RubyLLM.chat(provider: :gemini, model: "gemini-2.5-flash")
+                    .with_temperature(0.3)
+                    .with_params(
+                      tools: [{ google_search: {} }],
+                      generationConfig: {
+                        maxOutputTokens: 8000,
+                        responseMimeType: "application/json"  # Force JSON response
+                      }
+                    )
+
+      response = chat.ask(prompt)
+      content = response.content.strip
+
+      # Parse JSON response
+      data = JSON.parse(content)
+
+      Rails.logger.info "#{request_type} returned: #{data.is_a?(Array) ? data.size : 'object'} items"
+      data
+
+    rescue JSON::ParserError => e
+      Rails.logger.error "JSON parse error for #{request_type}: #{e.message}"
+      Rails.logger.error "Content: #{content[0..500]}"
+      request_type == "content_elements" ? {} : []
+    rescue => e
+      Rails.logger.error "Grounding API error for #{request_type}: #{e.message}"
+      Rails.logger.error e.backtrace.first(3).join("\n")
+      request_type == "content_elements" ? {} : []
+    end
+  end
+
+  def merge_research_data(examples, stats, content)
+    {
+      'detailed_examples' => examples || [],
+      'statistics' => stats || [],
+      'faqs' => content['faqs'] || [],
+      'recommended_tools' => content['recommended_tools'] || [],
+      'step_by_step_guides' => { 'guides' => content['step_by_step_guides'] || [] },
+      'comparison_tables' => { 'tables' => content['comparison_tables'] || [] },
+      'internal_link_opportunities' => content['internal_link_opportunities'] || [],
+      'cta_placements' => content['cta_placements'] || [],
+      'visual_elements' => { 'images' => [], 'videos' => [] }, # Will add later
+      'downloadable_resources' => { 'resources' => [] },
+      'common_topics' => [],
+      'content_gaps' => [],
+      'average_word_count' => 2500,
+      'recommended_approach' => ''
+    }
+  end
+
+  def validate_and_clean_results(data)
+    # Remove duplicates from examples
+    if data['detailed_examples'].is_a?(Array)
+      data['detailed_examples'] = data['detailed_examples']
+        .uniq { |ex| ex['company']&.downcase }
+        .reject { |ex| ex['company'].blank? || ex['outcome'].blank? || ex['source_url'].blank? }
+    end
+
+    # Remove stats without sources
+    if data['statistics'].is_a?(Array)
+      data['statistics'] = data['statistics']
+        .uniq { |stat| stat['stat'] }
+        .reject { |stat| stat['source_url'].blank? }
+    end
+
+    # Remove empty tools
+    if data['recommended_tools'].is_a?(Array)
+      data['recommended_tools'] = data['recommended_tools']
+        .reject { |tool| tool['tool_name'].blank? || tool['url'].blank? }
+    end
+
+    Rails.logger.info "After validation:"
+    Rails.logger.info "  - Examples: #{data['detailed_examples']&.size} (duplicates removed)"
+    Rails.logger.info "  - Statistics: #{data['statistics']&.size} (no-source removed)"
+    Rails.logger.info "  - Tools: #{data['recommended_tools']&.size} (empty removed)"
+
+    data
+  end
 
   def build_internal_context
     return nil unless @project

@@ -67,51 +67,67 @@ class KeywordResearchService
     end
   end
 
-  # Step 2: Discover and scrape competitors using Grounding
+  # Step 2: Discover and scrape competitors using Google Search + AI filtering
   def discover_and_scrape_competitors
-    Rails.logger.info "Step 2: Discovering and scrape competitors with Grounding..."
+    Rails.logger.info "Step 2: Discovering competitors with Google Search + AI filtering..."
 
     # Skip if user manually added competitors
     if @project.competitors.any?
       Rails.logger.info "Using #{@project.competitors.count} user-provided competitors"
-      competitor_domains = @project.competitors.pluck(:domain)
-    else
-      # Build rich context from domain analysis
-      domain_data = @project.domain_analysis || {}
-
-      # Use Grounding to discover competitors with rich context
-      grounding = GoogleGroundingService.new
-
-      # Build detailed query with actual business description
-      query = build_competitor_discovery_query(domain_data)
-      Rails.logger.info "Grounding query: #{query[0..200]}..."
-
-      json_structure = [
-        "competitor1.com",
-        "competitor2.com",
-        "competitor3.com"
-      ].to_json
-
-      result = grounding.search_json(query, json_structure_hint: json_structure)
-
-      if result[:success]
-        competitor_domains = parse_competitor_domains(result[:data])
-        Rails.logger.info "Discovered #{competitor_domains.size} competitors via Grounding"
-
-        # Log what was found for debugging
-        competitor_domains.first(5).each do |domain|
-          Rails.logger.info "  - #{domain}"
-        end
-      else
-        Rails.logger.warn "Grounding competitor discovery failed: #{result[:error]}"
-        competitor_domains = []
+      competitor_candidates = @project.competitors.map do |comp|
+        { domain: comp.domain, title: comp.name, description: "", source: "manual" }
       end
+    else
+      # Build search query based on domain content
+      domain_data = @project.domain_analysis || {}
+      search_query = build_search_query(domain_data)
+      Rails.logger.info "Searching for competitors with query: #{search_query}"
+
+      # Get Google Search results
+      scraper = SerpResearchService.new(search_query)
+      all_serp_results = scraper.search_results_only
+
+      if all_serp_results.empty?
+        Rails.logger.warn "No search results found"
+        @competitor_data = []
+        return
+      end
+
+      Rails.logger.info "Found #{all_serp_results.size} search results"
+
+      # Extract candidate domains from SERP
+      user_domain_host = URI(@project.domain).host.gsub(/^www\./, '')
+
+      competitor_candidates = all_serp_results.map do |result|
+        next unless result[:url]
+
+        uri = URI(result[:url])
+        host = uri.host.gsub(/^www\./, '')
+        domain = "#{uri.scheme}://#{uri.host}"
+
+        # Skip user's own domain
+        next if host == user_domain_host
+
+        {
+          domain: domain,
+          title: result[:title],
+          description: result[:snippet],
+          source: 'auto_detected'
+        }
+      end.compact.uniq { |c| c[:domain] }
+
+      Rails.logger.info "Found #{competitor_candidates.size} candidate competitors, filtering with AI..."
+
+      # Use AI to filter out blogs/news/aggregators
+      competitor_candidates = filter_competitors_with_ai(competitor_candidates, domain_data)
+      Rails.logger.info "AI filtered to #{competitor_candidates.size} likely competitors"
     end
 
     # Scrape discovered competitors
     @competitor_data = []
 
-    competitor_domains.first(10).each do |domain|
+    competitor_candidates.first(10).each do |candidate|
+      domain = candidate[:domain]
       Rails.logger.info "  Scraping #{domain}..."
       service = DomainAnalysisService.new(domain)
       data = service.analyze
@@ -134,13 +150,10 @@ class KeywordResearchService
       Rails.logger.info "Using #{@project.seed_keywords.size} user-provided seed keywords"
       seeds = @project.seed_keywords
     else
-      Rails.logger.info "Generating seed keywords from domain + competitor insights..."
-
-      # Extract competitor domains (not scraped data)
-      competitor_domains = @competitor_data.map { |c| c[:url] || c[:domain] }.compact rescue []
+      Rails.logger.info "Generating seed keywords from domain + competitor data..."
 
       generator = SeedKeywordGenerator.new(@project)
-      seeds = generator.generate_with_competitors(competitor_domains)
+      seeds = generator.generate(@competitor_data)
     end
 
     # Store seeds in keyword_research record
@@ -458,6 +471,95 @@ class KeywordResearchService
     filtered_keywords
   end
 
+  # Build search query for competitor discovery
+  def build_search_query(domain_data)
+    # Get main topic from H1 or title
+    raw_topic = domain_data[:h1s]&.first || domain_data[:title] || ""
+
+    # Clean it up - remove site name/branding
+    topic = raw_topic.split('|').first.strip
+
+    # Don't use overly generic niches
+    generic_niches = %w[saas software app platform tool service business]
+
+    if @project.niche.present? && !generic_niches.include?(@project.niche.downcase)
+      search_term = @project.niche
+    else
+      search_term = topic
+    end
+
+    # If search term is still too short/generic, use first H2 or meta description
+    if search_term.split.size < 2
+      search_term = domain_data[:h2s]&.first || domain_data[:meta_description] || search_term
+      search_term = search_term.split(/[.|,]/).first.strip  # Take first sentence
+    end
+
+    search_term
+  end
+
+  # Filter competitor candidates with AI to remove blogs/news/aggregators
+  def filter_competitors_with_ai(candidates, domain_data)
+    return candidates if candidates.empty?
+
+    user_description = domain_data[:h1s]&.first || domain_data[:title] || "website"
+
+    candidates_list = candidates.map.with_index do |c, i|
+      "#{i + 1}. #{c[:domain]}\n   Title: #{c[:title]}\n   Description: #{c[:description]}"
+    end.join("\n\n")
+
+    prompt = <<~PROMPT
+      I'm analyzing competitors for: #{@project.domain}
+      What they do: #{user_description}
+
+      Here are potential competitors from Google's related sites:
+
+      #{candidates_list}
+
+      For each site, determine if it's a LIKELY COMPETITOR (actual competing product/service) or NOT A COMPETITOR (aggregator, news site, blog, directory, review site, etc.).
+
+      Return ONLY a JSON array with the numbers of likely competitors:
+      ["1", "3", "5"]
+
+      Include sites that:
+      - Offer a similar product/service
+      - Serve the same target audience
+      - Solve similar problems
+
+      Exclude sites that are:
+      - News/blog sites (even if they cover the topic)
+      - Aggregator/directory sites (alternatives.to, g2.com, etc.)
+      - Review sites
+      - General business tools (not specific to the niche)
+      - Forums or communities
+    PROMPT
+
+    client = Ai::ClientService.for_keyword_analysis
+    response = client.chat(
+      messages: [{ role: "user", content: prompt }],
+      system_prompt: "You are an expert at identifying competitive products and filtering out non-competitive sites.",
+      max_tokens: 500,
+      temperature: 0.3
+    )
+
+    return candidates unless response[:success]
+
+    # Parse JSON response
+    begin
+      json_str = response[:content][/\[.*\]/m]
+      return candidates unless json_str
+
+      selected_indices = JSON.parse(json_str).map(&:to_i)
+      selected = candidates.select.with_index { |_, i| selected_indices.include?(i + 1) }
+
+      # If AI filtered out everything, return top candidates as fallback
+      selected.any? ? selected : candidates.first(5)
+    rescue JSON::ParserError => e
+      Rails.logger.error "Failed to parse AI competitor filter response: #{e.message}"
+      candidates
+    end
+  end
+
+  # DEPRECATED: Old Grounding-based competitor discovery
   # Build rich competitor discovery query for Grounding
   def build_competitor_discovery_query(domain_data)
     domain = @project.domain.gsub(%r{^https?://}, '').gsub(%r{^www\.}, '').gsub(%r{/$}, '')

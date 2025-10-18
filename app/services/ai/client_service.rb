@@ -10,7 +10,7 @@ class Ai::ClientService
     serp_analysis: { provider: "openai", model: "gpt-4o-mini" },
 
     # NEW: Grounding research providers
-    grounding_research: { provider: "gemini", model: "gemini-2.0-flash-exp" },
+    grounding_research: { provider: "gemini", model: "gemini-2.5-flash" },
     perplexity_search: { provider: "perplexity", model: "sonar" },
     openai_search: { provider: "openai", model: "gpt-4o" } # Future
   }.freeze
@@ -77,7 +77,7 @@ class Ai::ClientService
       chat = RubyLLM.chat(provider: @provider, model: @model)
                     .with_temperature(temperature)
                     .with_params(
-                      tools: [{ google_search: {} }], # Enable Google Search grounding
+                      tools: [ { google_search: {} } ], # Enable Google Search grounding
                       generationConfig: {
                         maxOutputTokens: max_tokens
                       }

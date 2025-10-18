@@ -21,18 +21,18 @@ class SeedKeywordGenerator
     @api_calls_used = 0
   end
 
-  # New method: accepts competitor DOMAINS (not scraped data)
-  # Grounding will research them directly
-  def generate_with_competitors(competitor_domains, domain_title: nil, domain_description: nil)
-    Rails.logger.info "Generating seed keywords with Grounding for: #{@domain}"
-    Rails.logger.info "Using #{competitor_domains.size} competitor domains for context"
+  # Generate seeds with OpenAI using YOUR domain + competitor data
+  def generate(competitor_data = [])
+    Rails.logger.info "Generating seed keywords for: #{@domain}"
+    Rails.logger.info "Using #{competitor_data.size} competitor data for context"
 
-    # Generate seeds via Grounding (it will analyze domain + competitors)
-    seeds = generate_seeds_via_grounding(competitor_domains, domain_title: domain_title, domain_description: domain_description)
-    @api_calls_used += 1
-    Rails.logger.info "  Generated #{seeds.size} seeds from Grounding (API calls: #{@api_calls_used})"
+    # Get domain data from project or scrape now
+    domain_data = @project&.domain_analysis || scrape_domain
 
-    Rails.logger.info "Total API calls used: #{@api_calls_used}"
+    # Generate seeds via OpenAI with strategic mix prompt
+    seeds = generate_seeds_via_openai(domain_data, competitor_data)
+    Rails.logger.info "  Generated #{seeds.size} seeds from OpenAI"
+
     seeds
   end
 
@@ -63,6 +63,110 @@ class SeedKeywordGenerator
   # end
 
   private
+
+  def scrape_domain
+    Rails.logger.info "Scraping domain for content analysis..."
+    service = DomainAnalysisService.new(@domain)
+    domain_data = service.analyze
+
+    # Store it on project for future use (if we have a project)
+    @project&.update(domain_analysis: domain_data) if domain_data && !domain_data[:error]
+
+    domain_data
+  end
+
+  # Generate seeds via OpenAI with strategic mix and competitor insights
+  def generate_seeds_via_openai(domain_data, competitor_data)
+    client = Ai::ClientService.for_keyword_analysis
+
+    # Build competitor insights from scraped data
+    competitor_insights = ""
+    if competitor_data.any?
+      competitor_insights = "\nCOMPETITOR ANALYSIS:\n"
+      competitor_data.first(5).each_with_index do |comp_data, index|
+        comp_title = comp_data[:title] || "Unknown"
+        comp_h1s = comp_data[:h1s]&.first(3)&.join(", ") || "Not available"
+        comp_h2s = comp_data[:h2s]&.first(3)&.join(", ") || "Not available"
+        competitor_insights += "Competitor #{index + 1}: #{comp_title}\n"
+        competitor_insights += "  Main topics: #{comp_h1s}\n"
+        competitor_insights += "  Content areas: #{comp_h2s}\n\n"
+      end
+    end
+
+    title = domain_data[:title] || "Unknown"
+    meta_desc = domain_data[:meta_description] || "Not available"
+    h1s = domain_data[:h1s]&.join(", ") || "Not available"
+    h2s = domain_data[:h2s]&.first(5)&.join(", ") || "Not available"
+
+    prompt = <<~PROMPT
+      I need seed keywords for an SEO content strategy.
+
+      DOMAIN ANALYSIS (based on actual website content):
+      Domain: #{@domain}
+      Page Title: #{title}
+      Meta Description: #{meta_desc}
+      Main Headings (H1s): #{h1s}
+      Content Topics (H2s): #{h2s}
+      #{@niche.present? ? "Niche: #{@niche}" : ""}
+      #{competitor_insights}
+
+      Based on the ACTUAL content from this website (not just the domain name), generate 20 seed keywords with STRATEGIC DIVERSITY:
+
+      ═══════════════════════════════════════════════════════════════
+      TIER 1: HIGH-VOLUME BROAD (8 keywords, 1-3 words)
+      ═══════════════════════════════════════════════════════════════
+      The "money keywords" - high search volume, even if competitive.
+
+      Focus on:
+      - Core problem/solution keywords (the PROBLEM they're solving)
+      - Industry-defining category terms
+      - Generic "how to" phrases related to the main problem
+
+      NOT product features or specific tools (save for Tier 2/3)
+
+      ═══════════════════════════════════════════════════════════════
+      TIER 2: MEDIUM-COMPETITION (6 keywords, 3-5 words)
+      ═══════════════════════════════════════════════════════════════
+      Realistic wins within 6-12 months.
+
+      Focus on:
+      - Problem-solving phrases ("how to...")
+      - Category + tool/software/platform
+      - Specific use cases or methods
+
+      ═══════════════════════════════════════════════════════════════
+      TIER 3: LOW-COMPETITION LONG-TAIL (6 keywords, 5-8 words)
+      ═══════════════════════════════════════════════════════════════
+      Quick wins - very specific, lower volume but high intent.
+
+      Focus on:
+      - Specific features + use case
+      - Technology + category + descriptor
+      - Very precise user needs
+
+      CRITICAL: Focus on keywords where users want to DO what this product does.
+      - If product validates ideas → include "validate idea", NOT "generate idea"
+      - If product creates invoices → include "create invoice", NOT "send invoice"
+      - If product tracks time → include "time tracking", NOT "analyze productivity"
+
+      Return ONLY the keywords, one per line, without numbering or extra explanation.
+      Focus on keywords with commercial or informational intent.
+    PROMPT
+
+    response = client.chat(
+      messages: [{ role: "user", content: prompt }],
+      system_prompt: "You are an expert SEO strategist who generates keyword ideas based on actual website content.",
+      max_tokens: 2000,
+      temperature: 0.7
+    )
+
+    if response[:success]
+      parse_keywords(response[:content])
+    else
+      Rails.logger.error "Seed generation failed: #{response[:error]}, using fallback"
+      fallback_seeds(domain_data)
+    end
+  end
 
   # DEPRECATED: Old scraping methods - no longer needed with Grounding
   # def scrape_domain
@@ -135,206 +239,6 @@ class SeedKeywordGenerator
   #
   #   competitor_data
   # end
-
-  # Generate seeds via Grounding - let it research the domain + competitors
-  def generate_seeds_via_grounding(competitor_domains, domain_title: nil, domain_description: nil)
-    # Use actual domain data if provided (from autofill), otherwise use project data
-    if domain_title || domain_description
-      title = domain_title || @domain
-      description = domain_description || "Business website"
-    else
-      # Fallback to project data
-      raw_description = if @project
-        @project.description.presence || "#{@project.name} - #{@niche}"
-      else
-        @niche || "Unknown business"
-      end
-
-      description = if raw_description.include?("Description:")
-        raw_description.split("Description:").last.strip
-      else
-        raw_description
-      end
-
-      title = @project&.name || @domain
-    end
-
-    # Build competitor list for Grounding to research
-    competitor_list = if competitor_domains.any?
-      competitor_domains.first(10).map { |d| "- #{d}" }.join("\n")
-    else
-      "(No competitors provided - analyze the main domain only)"
-    end
-
-    query = <<~QUERY
-      Analyze this business and generate 20 high-quality SEO seed keywords.
-
-      BUSINESS TO ANALYZE:
-      Title: #{title}
-      Description: #{description}
-      Website: #{@domain}
-
-      TOP COMPETITORS (for context):
-      #{competitor_list}
-
-      CRITICAL: The title and description above tell you EXACTLY what this business does.
-      Generate keywords for THAT specific business only.
-      Do NOT be misled by the domain name - use the title/description to understand their actual service.
-
-      Generate 20 seed keywords that:
-      - Match EXACTLY what this business does (based on title/description above)
-      - Have clear search intent (what users would actually search for)
-      - Are specific to this tool's category (not generic adjacent categories)
-      - Focus on the core value proposition and target audience
-
-      AVOID generating keywords for:
-      - Services NOT mentioned in the title/description
-      - Adjacent but different tools
-      - Generic categories that are too broad
-      - Features this tool doesn't have
-
-      QUALITY RULES:
-      - Each keyword should be something a user would search when looking for THIS specific type of tool
-      - Prefer specific over generic (e.g., "startup idea validation tool" > "business tools")
-      - Include the main category/use case in most keywords
-
-      Return ONLY a JSON array of keyword strings (no objects, just strings):
-      ["keyword 1", "keyword 2", "keyword 3"]
-
-      No markdown code blocks, just pure JSON.
-    QUERY
-
-    json_structure = ["keyword 1", "keyword 2", "keyword 3"].to_json
-
-    result = @grounding.search_json(query, json_structure_hint: json_structure)
-
-    unless result[:success]
-      Rails.logger.warn "Seed generation failed: #{result[:error]}, using fallback"
-      return fallback_seeds(description)
-    end
-
-    # Parse keywords from JSON response
-    keywords = result[:data]
-
-    # Handle different response formats
-    keywords = case keywords
-    when Array
-      keywords.map { |k| clean_keyword(k) }
-    when Hash
-      (keywords["keywords"] || keywords["seeds"] || []).map { |k| clean_keyword(k) }
-    else
-      []
-    end
-
-    keywords.compact.uniq.first(20)
-  rescue => e
-    Rails.logger.error "Seed generation error: #{e.message}, using fallback"
-    fallback_seeds(description)
-  end
-
-  # Fallback to OpenAI if Grounding fails
-  def fallback_to_openai(domain_data, competitor_data)
-    Rails.logger.info "Using OpenAI fallback for seed generation"
-
-    client = Ai::ClientService.for_keyword_analysis
-    prompt = build_openai_prompt(domain_data, competitor_data)
-
-    response = client.chat(
-      messages: [{ role: "user", content: prompt }],
-      system_prompt: "You are an expert SEO strategist who generates keyword ideas based on actual website content.",
-      max_tokens: 2000,
-      temperature: 0.7
-    )
-
-    if response[:success]
-      parse_keywords(response[:content])
-    else
-      Rails.logger.error "OpenAI fallback also failed: #{response[:error]}"
-      fallback_seeds(domain_data)
-    end
-  end
-
-  def build_openai_prompt(domain_data, competitor_data)
-    title = domain_data[:title] || "Unknown"
-    meta_desc = domain_data[:meta_description] || "Not available"
-    h1s = domain_data[:h1s]&.join(", ") || "Not available"
-    h2s = domain_data[:h2s]&.first(5)&.join(", ") || "Not available"
-
-    competitor_insights = ""
-    if competitor_data.any?
-      competitor_insights = "\nCOMPETITOR ANALYSIS:\n"
-      competitor_data.each_with_index do |comp_data, index|
-        comp_title = comp_data[:title] || "Unknown"
-        comp_h1s = comp_data[:h1s]&.first(3)&.join(", ") || "Not available"
-        competitor_insights += "Competitor #{index + 1}: #{comp_title}\nKey Topics: #{comp_h1s}\n\n"
-      end
-    end
-
-    <<~PROMPT
-      I need seed keywords for an SEO content strategy.
-
-      DOMAIN ANALYSIS (based on actual website content):
-      Domain: #{@domain}
-      Page Title: #{title}
-      Meta Description: #{meta_desc}
-      Main Headings (H1s): #{h1s}
-      Content Topics (H2s): #{h2s}
-      #{@niche.present? ? "Niche: #{@niche}" : ""}
-      #{competitor_insights}
-
-      Based on the ACTUAL content from this website (not just the domain name), generate 20-30 seed keywords with STRATEGIC DIVERSITY:
-
-      HIGH-VOLUME BROAD (5-8 keywords, 1-2 words) - The "money" keywords, even if competitive
-      MEDIUM-COMPETITION (6-9 keywords, 2-4 words) - Realistic wins within 6-12 months
-      LOW-COMPETITION LONG-TAIL (6-9 keywords, 4-6 words) - Quick wins, very specific
-
-      Return ONLY the keywords, one per line, without numbering or extra explanation.
-      Focus on keywords with commercial or informational intent.
-    PROMPT
-  end
-
-  def normalize_competitor(competitor)
-    return nil if competitor.blank?
-
-    domain = competitor.is_a?(Hash) ? (competitor["domain"] || competitor["url"]) : competitor
-    return nil if domain.blank?
-
-    domain = domain.to_s.strip
-                   .gsub(%r{^https?://}, '')
-                   .gsub(%r{^www\.}, '')
-                   .gsub(%r{/$}, '')
-                   .split('/').first
-
-    return nil if domain.empty? || !domain.include?('.')
-
-    domain.downcase
-  end
-
-  def clean_keyword(keyword)
-    return nil if keyword.blank?
-
-    kw = keyword.is_a?(Hash) ? (keyword["keyword"] || keyword["text"]) : keyword
-    return nil if kw.blank?
-
-    kw = kw.to_s.strip
-           .gsub(/^["'\(\)]/, '')
-           .gsub(/["'\(\)]$/, '')
-           .gsub(/\s+/, ' ')
-           .downcase
-
-    return nil unless valid_keyword?(kw)
-
-    kw
-  end
-
-  def valid_keyword?(keyword)
-    return false if keyword.blank?
-    return false if keyword.length < 2 || keyword.length > 100 # Allow 2-letter keywords like "ai", "ux"
-    return false if keyword.split.size > 8
-    return false if keyword.match?(/^\d+$/)
-
-    true
-  end
 
   def parse_keywords(content)
     keywords = content.split("\n")
