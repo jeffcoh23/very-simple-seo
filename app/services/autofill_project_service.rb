@@ -47,8 +47,7 @@ class AutofillProjectService
     Rails.logger.info "Detecting competitors for: #{@domain}"
 
     begin
-      # Use pure Grounding - it's better at finding actual competitors than Google Search
-      # (Google Search returns mostly review sites, blog posts, and listings)
+      # Use pure Grounding to search the web for competitors
       grounding = GoogleGroundingService.new
 
       my_title = domain_data[:title] || @domain
@@ -64,27 +63,32 @@ class AutofillProjectService
 
         Your job: Find direct competitors.
 
-        FILTERING CRITERIA - Must pass ALL tests:
-        1. Same primary job - customers would use THIS instead of my business for the SAME task?
+        CRITICAL FILTERING - Must pass ALL tests:
+        1. Same primary job - customers would use THIS instead of my business for the EXACT SAME task?
         2. Same product category - not adjacent/related categories
-        3. Dedicated tool - not general platforms
-        4. Actual software - not blogs/news/content sites
+        3. Dedicated tool - not general platforms, games, or educational simulators
+        4. Actual software tool - not blogs, news, content sites, or gamified experiences
+
+        COMMON MISTAKES TO AVOID:
+        - Don't include educational games or simulations (e.g., if this is a validation tool, don't include startup games)
+        - Don't include tools that mention similar keywords but do something fundamentally different
+        - Don't include tools that are adjacent but not direct competitors
 
         For each competitor you find:
-        - Research the domain to verify it's a real competitor
-        - Return domain (without https://), title, and what they do
+        - VERIFY by visiting the domain that it actually does what you think
+        - Return domain (without https://), title, and what they ACTUALLY do (not what you think they do)
 
-        Return ONLY valid JSON array of competitors:
+        Return ONLY valid JSON array of VERIFIED competitors:
         [
           {
             "domain": "competitor.com",
             "title": "Company Name",
-            "description": "What they actually do"
+            "description": "What they actually do (verified by visiting domain)"
           }
         ]
 
-        Be strict - only include clear matches that pass all 4 tests.
-        Find as many as you can (aim for 10-20+ if they exist).
+        Be EXTREMELY strict - only include tools that pass all 4 tests after verification.
+        Quality over quantity - better to return 5 real competitors than 15 questionable ones.
       QUERY
 
       json_structure = [{domain: "competitor.com", title: "Name", description: "What they do"}].to_json
