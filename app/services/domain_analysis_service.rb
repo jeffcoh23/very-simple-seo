@@ -1,9 +1,9 @@
 # app/services/domain_analysis_service.rb
 # Scrapes a domain to extract content, meta tags, and sitemap for context
 class DomainAnalysisService
-  require 'net/http'
-  require 'nokogiri'
-  require 'uri'
+  require "net/http"
+  require "nokogiri"
+  require "uri"
 
   def initialize(domain)
     @domain = domain
@@ -39,7 +39,7 @@ class DomainAnalysisService
 
   def scrape_homepage
     uri = URI(@domain)
-    uri.path = '/' if uri.path.empty?
+    uri.path = "/" if uri.path.empty?
 
     response = fetch_with_retry(uri)
     return unless response
@@ -47,12 +47,12 @@ class DomainAnalysisService
     doc = Nokogiri::HTML(response.body)
 
     # Extract meta tags
-    @results[:title] = doc.at_css('title')&.text&.strip
-    @results[:meta_description] = doc.at_css('meta[name="description"]')&.[]('content')&.strip
+    @results[:title] = doc.at_css("title")&.text&.strip
+    @results[:meta_description] = doc.at_css('meta[name="description"]')&.[]("content")&.strip
 
     # Extract headings
-    @results[:h1s] = doc.css('h1').map { |h| h.text.strip }.reject(&:empty?).uniq
-    @results[:h2s] = doc.css('h2').map { |h| h.text.strip }.reject(&:empty?).uniq.first(10)
+    @results[:h1s] = doc.css("h1").map { |h| h.text.strip }.reject(&:empty?).uniq
+    @results[:h2s] = doc.css("h2").map { |h| h.text.strip }.reject(&:empty?).uniq.first(10)
 
     # Create content summary
     @results[:content_summary] = build_content_summary
@@ -63,14 +63,14 @@ class DomainAnalysisService
   def detect_sitemap
     # Try common sitemap locations (including gzipped versions)
     sitemap_paths = [
-      '/sitemap.xml',
-      '/sitemap.xml.gz',
-      '/sitemap_index.xml',
-      '/sitemap_index.xml.gz',
-      '/sitemap-index.xml',
-      '/sitemap-index.xml.gz',
-      '/sitemaps/sitemap.xml',
-      '/sitemaps/sitemap.xml.gz'
+      "/sitemap.xml",
+      "/sitemap.xml.gz",
+      "/sitemap_index.xml",
+      "/sitemap_index.xml.gz",
+      "/sitemap-index.xml",
+      "/sitemap-index.xml.gz",
+      "/sitemaps/sitemap.xml",
+      "/sitemaps/sitemap.xml.gz"
     ]
 
     sitemap_paths.each do |path|
@@ -78,17 +78,17 @@ class DomainAnalysisService
       uri.path = path
 
       response = fetch_with_retry(uri)
-      next unless response&.code == '200'
+      next unless response&.code == "200"
 
       # Found a sitemap!
       @results[:sitemap_url] = uri.to_s
 
       # Decompress if gzipped
-      content = if path.end_with?('.gz')
+      content = if path.end_with?(".gz")
                   decompress_gzip(response.body)
-                else
+      else
                   response.body
-                end
+      end
 
       parse_sitemap(content)
       break
@@ -98,8 +98,8 @@ class DomainAnalysisService
   end
 
   def decompress_gzip(gzipped_content)
-    require 'zlib'
-    require 'stringio'
+    require "zlib"
+    require "stringio"
 
     gz = Zlib::GzipReader.new(StringIO.new(gzipped_content))
     gz.read
@@ -111,18 +111,18 @@ class DomainAnalysisService
     doc = Nokogiri::XML(xml_content)
 
     # Extract all URLs from sitemap
-    urls = doc.css('url loc').map(&:text)
+    urls = doc.css("url loc").map(&:text)
 
     # Convert URLs to potential keywords
     # Extract path segments that look like content topics
     @results[:sitemap_keywords] = urls.map do |url|
       uri = URI(url)
       # Get last path segment, clean it up
-      path = uri.path.split('/').reject(&:empty?).last
+      path = uri.path.split("/").reject(&:empty?).last
       next unless path
 
       # Convert to readable keyword
-      path.gsub(/[-_]/, ' ').strip
+      path.gsub(/[-_]/, " ").strip
     end.compact.uniq.first(20)
 
     Rails.logger.info "Parsed sitemap: #{urls.size} URLs, #{@results[:sitemap_keywords].size} potential keywords"
@@ -145,16 +145,16 @@ class DomainAnalysisService
 
     begin
       http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = (uri.scheme == 'https')
+      http.use_ssl = (uri.scheme == "https")
       http.open_timeout = 10
       http.read_timeout = 10
 
       request = Net::HTTP::Get.new(uri.request_uri)
-      request['User-Agent'] = 'VerySimpleSEO Bot (SEO Content Analysis)'
+      request["User-Agent"] = "VerySimpleSEO Bot (SEO Content Analysis)"
 
       response = http.request(request)
 
-      if response.code == '200'
+      if response.code == "200"
         response
       else
         Rails.logger.warn "HTTP #{response.code} for #{uri}"

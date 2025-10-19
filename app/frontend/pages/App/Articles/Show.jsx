@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react"
 import { Link, usePage, router } from "@inertiajs/react"
 import { createConsumer } from "@rails/actioncable"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import AppLayout from "@/layout/AppLayout"
 import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Loader2, Download, FileText, Eye, Trash2 } from "lucide-react"
+import { ArrowLeft, Loader2, Download, Eye, Trash2, RefreshCw, RotateCcw, Calendar, Clock, FileText, Target, ChevronUp, ChevronDown } from "lucide-react"
 
 export default function ArticlesShow() {
   const { article, project, keyword } = usePage().props
@@ -13,10 +15,10 @@ export default function ArticlesShow() {
   const [articleStatus, setArticleStatus] = useState(article.status)
   const [articleContent, setArticleContent] = useState(article.content)
   const [wordCount, setWordCount] = useState(article.word_count || 0)
-  const [generationCost, setGenerationCost] = useState(article.generation_cost || 0)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [progressMessage, setProgressMessage] = useState("")
   const [progressLog, setProgressLog] = useState([])
+  const [showOutline, setShowOutline] = useState(true)
 
   // Real-time updates via ActionCable
   useEffect(() => {
@@ -36,7 +38,6 @@ export default function ArticlesShow() {
 
           setArticleStatus(data.status)
           setWordCount(data.word_count || 0)
-          setGenerationCost(data.generation_cost || 0)
 
           // Update progress message
           if (data.progress_message) {
@@ -77,6 +78,12 @@ export default function ArticlesShow() {
     }
   }
 
+  const formatDate = (dateString) => {
+    if (!dateString) return "—"
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+
   const getStatusBadge = () => {
     switch (articleStatus) {
       case 'pending':
@@ -104,14 +111,11 @@ export default function ArticlesShow() {
 
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-3xl font-display font-bold">
-                  {article.title || "Generating Article..."}
-                </h1>
-                {getStatusBadge()}
-              </div>
+              <h1 className="text-3xl font-display font-bold mb-2">
+                {article.title || "Generating Article..."}
+              </h1>
               <p className="text-muted-foreground">
-                Keyword: <span className="font-medium">{keyword.keyword}</span>
+                Keyword: <span className="font-medium font-mono">{keyword.keyword}</span>
               </p>
             </div>
 
@@ -183,11 +187,11 @@ export default function ArticlesShow() {
 
                   <div className="mt-2 space-y-1">
                     <p className="text-xs text-info">
-                      This takes about 60 seconds. We're researching competitors, creating an outline, and writing your article.
+                      This takes about 1-5 minutes. We're researching competitors, creating an outline, and writing your article.
                     </p>
                     {wordCount > 0 && (
                       <p className="text-xs text-info">
-                        Progress: {wordCount} words • ${generationCost.toFixed(2)} cost
+                        Progress: {wordCount} words written
                       </p>
                     )}
                   </div>
@@ -200,67 +204,243 @@ export default function ArticlesShow() {
         {articleStatus === 'failed' && article.error_message && (
           <Card className="bg-destructive-soft border-2 border-destructive/30">
             <CardContent className="py-4">
-              <h3 className="font-semibold text-destructive">Generation failed</h3>
-              <p className="text-sm text-destructive mt-1">{article.error_message}</p>
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-destructive">Generation failed</h3>
+                  <p className="text-sm text-destructive mt-1">{article.error_message}</p>
+                </div>
+                <div className="flex gap-2 ml-4">
+                  <Button
+                    variant="outline"
+                    className="border-2 border-destructive text-destructive hover:bg-destructive/10"
+                    onClick={() => router.post(article.routes.retry_article)}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Retry
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-2 border-primary text-primary hover:bg-primary/10"
+                    onClick={() => {
+                      if (confirm("Regenerate from scratch? This will cost 1 credit.")) {
+                        router.post(article.routes.regenerate_article)
+                      }
+                    }}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Regenerate
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Article Stats */}
+        {/* Sidebar + Content Layout */}
         {articleStatus === 'completed' && (
-          <div className="grid grid-cols-4 gap-4">
-            <Card className="border-2">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{wordCount}</div>
-                <div className="text-sm text-muted-foreground">Words</div>
-              </CardContent>
-            </Card>
-            <Card className="border-2">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">${generationCost.toFixed(2)}</div>
-                <div className="text-sm text-muted-foreground">Generation Cost</div>
-              </CardContent>
-            </Card>
-            <Card className="border-2">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{keyword.volume?.toLocaleString() || "—"}</div>
-                <div className="text-sm text-muted-foreground">Monthly Searches</div>
-              </CardContent>
-            </Card>
-            <Card className="border-2">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{keyword.difficulty}</div>
-                <div className="text-sm text-muted-foreground">Keyword Difficulty</div>
-              </CardContent>
-            </Card>
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Sidebar */}
+            <aside className="lg:w-80 flex-shrink-0 space-y-6">
+              {/* Status & Metadata */}
+              <Card className="border-2">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">Status</CardTitle>
+                    {getStatusBadge()}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
+                    <div>
+                      <div className="text-sm text-muted-foreground">Word Count</div>
+                      <div className="text-lg font-semibold">{wordCount}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Target className="h-5 w-5 text-muted-foreground mt-0.5" />
+                    <div>
+                      <div className="text-sm text-muted-foreground">Target Words</div>
+                      <div className="text-lg font-semibold">{article.target_word_count || "—"}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
+                    <div>
+                      <div className="text-sm text-muted-foreground">Started</div>
+                      <div className="text-sm">{formatDate(article.started_at)}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
+                    <div>
+                      <div className="text-sm text-muted-foreground">Completed</div>
+                      <div className="text-sm">{formatDate(article.completed_at)}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Keyword Info */}
+              <Card className="border-2">
+                <CardHeader>
+                  <CardTitle className="text-lg">Keyword Data</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <div className="text-sm text-muted-foreground">Monthly Searches</div>
+                    <div className="text-lg font-semibold">{keyword.volume?.toLocaleString() || "—"}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-muted-foreground">Difficulty</div>
+                    <div className="text-lg font-semibold">{keyword.difficulty}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-muted-foreground">Opportunity Score</div>
+                    <div className="text-lg font-semibold">{keyword.opportunity}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-muted-foreground">Intent</div>
+                    <div className="text-sm font-medium capitalize">{keyword.intent}</div>
+                  </div>
+                </CardContent>
+              </Card>
+
+            </aside>
+
+            {/* Main Content */}
+            <div className="flex-1 space-y-6">
+              {/* Meta Description */}
+              {article.meta_description && (
+                <Card className="border-2">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Meta Description</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground">{article.meta_description}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Article Outline */}
+              {article.outline && (
+                <Card className="border-2 bg-warm">
+                  <CardHeader className="cursor-pointer" onClick={() => setShowOutline(!showOutline)}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg">Table of Contents</CardTitle>
+                        <CardDescription>What you'll learn in this article</CardDescription>
+                      </div>
+                      {showOutline ? (
+                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </CardHeader>
+                  {showOutline && (
+                    <CardContent>
+                    <ol className="space-y-3 list-none">
+                      {(() => {
+                        // Handle different outline formats
+                        let sections = []
+
+                        if (Array.isArray(article.outline)) {
+                          sections = article.outline
+                        } else if (typeof article.outline === 'object' && article.outline.sections) {
+                          sections = article.outline.sections
+                        } else if (typeof article.outline === 'object') {
+                          // Try to extract sections from object
+                          sections = Object.values(article.outline).filter(item =>
+                            typeof item === 'object' || typeof item === 'string'
+                          )
+                        }
+
+                        return sections.map((section, index) => {
+                          let heading = ''
+                          let subheadings = []
+
+                          if (typeof section === 'string') {
+                            heading = section
+                          } else if (section.heading) {
+                            heading = section.heading
+                            subheadings = section.subheadings || section.key_points || []
+                          } else if (section.title) {
+                            heading = section.title
+                            subheadings = section.subsections || section.points || []
+                          }
+
+                          return (
+                            <li key={index} className="flex gap-3">
+                              <span className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-sm">
+                                {index + 1}
+                              </span>
+                              <div className="flex-1">
+                                <div className="font-semibold text-foreground mb-1">{heading}</div>
+                                {subheadings.length > 0 && (
+                                  <ul className="space-y-1 ml-4">
+                                    {subheadings.map((sub, subIndex) => (
+                                      <li key={subIndex} className="text-sm text-muted-foreground flex gap-2">
+                                        <span className="text-primary">•</span>
+                                        <span>{typeof sub === 'string' ? sub : sub.heading || sub.title || sub}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            </li>
+                          )
+                        })
+                      })()}
+                    </ol>
+                  </CardContent>
+                  )}
+                </Card>
+              )}
+
+              {/* Article Content */}
+              {article.content && (
+                <Card className="border-2">
+                  <CardHeader>
+                    <CardTitle>Article Content</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="prose prose-lg max-w-none
+                      prose-headings:font-display prose-headings:text-foreground prose-headings:tracking-tight
+                      prose-h1:text-4xl prose-h1:font-bold prose-h1:mb-4 prose-h1:mt-8
+                      prose-h2:text-3xl prose-h2:font-bold prose-h2:mb-3 prose-h2:mt-6
+                      prose-h3:text-2xl prose-h3:font-semibold prose-h3:mb-2 prose-h3:mt-4
+                      prose-p:text-foreground prose-p:leading-relaxed prose-p:mb-4
+                      prose-strong:text-foreground prose-strong:font-semibold
+                      prose-li:text-foreground prose-li:my-1
+                      prose-ul:my-4 prose-ol:my-4
+                      prose-a:text-primary prose-a:underline prose-a:font-medium
+                      prose-code:text-foreground prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono
+                      prose-blockquote:border-l-4 prose-blockquote:border-primary prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-muted-foreground
+                      prose-img:rounded-lg prose-img:shadow-md
+                    ">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          h1: ({node, ...props}) => <h1 className="scroll-mt-24" {...props} />,
+                          h2: ({node, ...props}) => <h2 className="scroll-mt-24" {...props} />,
+                          h3: ({node, ...props}) => <h3 className="scroll-mt-24" {...props} />,
+                        }}
+                      >
+                        {article.content}
+                      </ReactMarkdown>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </div>
-        )}
-
-        {/* Meta Description */}
-        {articleStatus === 'completed' && article.meta_description && (
-          <Card className="border-2">
-            <CardHeader>
-              <CardTitle className="text-lg">Meta Description</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">{article.meta_description}</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Article Content */}
-        {articleStatus === 'completed' && article.content && (
-          <Card className="border-2">
-            <CardHeader>
-              <CardTitle>Article Content</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div
-                className="prose prose-lg max-w-none"
-                dangerouslySetInnerHTML={{ __html: article.content }}
-              />
-            </CardContent>
-          </Card>
         )}
 
         {/* Outline (while generating) */}

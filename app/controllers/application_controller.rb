@@ -3,7 +3,7 @@ include Authentication
 include InertiaRails::Controller
 
 # Allow unauthenticated access to error pages
-allow_unauthenticated_access only: [:render_404, :render_500]
+allow_unauthenticated_access only: [ :render_404, :render_500 ]
 
 # Error handling for custom error pages
 rescue_from ActiveRecord::RecordNotFound, with: :render_404
@@ -103,8 +103,10 @@ def article_routes(article)
   {
     article: article_path(article),
     delete_article: article_path(article),
-    export_markdown: export_article_path(article, format: 'markdown'),
-    export_html: export_article_path(article, format: 'html'),
+    export_markdown: export_article_path(article, format: "markdown"),
+    export_html: export_article_path(article, format: "html"),
+    retry_article: retry_article_path(article),
+    regenerate_article: regenerate_article_path(article),
     project: project_path(article.project)
   }
 end

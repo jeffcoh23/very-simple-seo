@@ -17,7 +17,7 @@ class Keyword < ApplicationRecord
   scope :unpublished, -> { where(published: false) }
   scope :by_opportunity, -> { order(opportunity: :desc) }
   scope :starred, -> { where(starred: true) }
-  scope :recommended, -> { where('opportunity >= ?', 70) }
+  scope :recommended, -> { where("opportunity >= ?", 70) }
   scope :queued_for_generation, -> { where(queued_for_generation: true) }
   scope :scheduled, -> { where.not(scheduled_for: nil) }
 

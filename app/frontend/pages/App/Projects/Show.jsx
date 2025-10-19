@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef, useMemo } from "react"
 import { Link, usePage, router } from "@inertiajs/react"
 import { createConsumer } from "@rails/actioncable"
 import AppLayout from "@/layout/AppLayout"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Loader2, TrendingUp, Eye, Star, Download, ChevronDown, ChevronUp } from "lucide-react"
-import ArticleGenerateForm from "@/components/app/ArticleGenerateForm"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { ArrowLeft, Loader2, TrendingUp, Eye, Star, FileText, ChevronDown, ChevronUp, Filter, X, Key } from "lucide-react"
 
 export default function ProjectsShow() {
-  const { project, keywordResearch, keywords } = usePage().props
+  const { project, keywordResearch, keywords, articles } = usePage().props
   const { routes, auth } = usePage().props
 
   const [researchStatus, setResearchStatus] = useState(keywordResearch?.status)
@@ -17,6 +17,19 @@ export default function ProjectsShow() {
   const [progressMessage, setProgressMessage] = useState("")
   const [progressLog, setProgressLog] = useState(keywordResearch?.progress_log || [])
   const [showResearchLog, setShowResearchLog] = useState(false)
+  const progressLogRef = useRef(null)
+
+  // Filter and sort state
+  const [intentFilter, setIntentFilter] = useState("all")
+  const [difficultyFilter, setDifficultyFilter] = useState("all")
+  const [sortBy, setSortBy] = useState("opportunity")
+
+  // Auto-scroll progress log when new messages arrive
+  useEffect(() => {
+    if (progressLogRef.current) {
+      progressLogRef.current.scrollTop = progressLogRef.current.scrollHeight
+    }
+  }, [progressLog])
 
   // Real-time updates via ActionCable
   useEffect(() => {
@@ -70,6 +83,11 @@ export default function ProjectsShow() {
     }
   }, [keywordResearch?.id])
 
+  const formatDate = (dateString) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
   const getIntentBadge = (intent) => {
     const colors = {
       informational: "bg-info-soft text-info border-2 border-info/30",
@@ -84,6 +102,61 @@ export default function ProjectsShow() {
     if (difficulty <= 30) return { label: "Easy", color: "bg-success-soft text-success border-2 border-success/30 font-semibold" }
     if (difficulty <= 60) return { label: "Medium", color: "bg-warning-soft text-warning border-2 border-warning/30 font-semibold" }
     return { label: "Hard", color: "bg-destructive-soft text-destructive border-2 border-destructive/30 font-semibold" }
+  }
+
+  const getStatusBadge = (status) => {
+    const badges = {
+      pending: <Badge className="bg-warning-soft text-warning border-2 border-warning/30 font-semibold">Pending</Badge>,
+      generating: <Badge className="bg-info-soft text-info border-2 border-info/30 font-semibold">Generating</Badge>,
+      completed: <Badge className="bg-success-soft text-success border-2 border-success/30 font-semibold">Completed</Badge>,
+      failed: <Badge className="bg-destructive-soft text-destructive border-2 border-destructive/30 font-semibold">Failed</Badge>
+    }
+    return badges[status] || null
+  }
+
+  // Filter and sort keywords
+  const filteredAndSortedKeywords = useMemo(() => {
+    let result = [...keywords]
+
+    // Apply intent filter
+    if (intentFilter !== "all") {
+      result = result.filter(k => k.intent === intentFilter)
+    }
+
+    // Apply difficulty filter
+    if (difficultyFilter !== "all") {
+      result = result.filter(k => {
+        const diff = getDifficultyBadge(k.difficulty).label.toLowerCase()
+        return diff === difficultyFilter
+      })
+    }
+
+    // Apply sorting
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case "volume":
+          return (b.volume || 0) - (a.volume || 0)
+        case "difficulty":
+          return a.difficulty - b.difficulty
+        case "cpc":
+          return (b.cpc || 0) - (a.cpc || 0)
+        case "keyword":
+          return a.keyword.localeCompare(b.keyword)
+        case "opportunity":
+        default:
+          return b.opportunity - a.opportunity
+      }
+    })
+
+    return result
+  }, [keywords, intentFilter, difficultyFilter, sortBy])
+
+  // Count active filters
+  const activeFiltersCount = (intentFilter !== "all" ? 1 : 0) + (difficultyFilter !== "all" ? 1 : 0)
+
+  const clearFilters = () => {
+    setIntentFilter("all")
+    setDifficultyFilter("all")
   }
 
   return (
@@ -145,7 +218,10 @@ export default function ProjectsShow() {
 
                   {/* Progress Log */}
                   {progressLog.length > 0 && (
-                    <div className="mt-3 space-y-1 max-h-48 overflow-y-auto bg-white/50 rounded p-2 border-2 border-info/30">
+                    <div
+                      ref={progressLogRef}
+                      className="mt-3 space-y-1 max-h-48 overflow-y-auto bg-white/50 rounded p-2 border-2 border-info/30 scroll-smooth"
+                    >
                       {progressLog.map((entry, index) => {
                         const indent = entry.indent || 0
                         const paddingLeft = indent * 16 // 16px per indent level
@@ -163,7 +239,7 @@ export default function ProjectsShow() {
                   )}
 
                   <p className="text-xs text-info mt-2">
-                    Found {keywordsFound} keywords so far. This usually takes about 40 seconds.
+                    Found {keywordsFound} keywords so far. This usually takes about 1-3 minutes.
                   </p>
                 </div>
               </div>
@@ -218,100 +294,285 @@ export default function ProjectsShow() {
           </Card>
         )}
 
-        {/* Keywords Table */}
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle>Keywords</CardTitle>
-            <CardDescription>
-              Top keyword opportunities for your content strategy
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {keywords.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <p>No keywords found yet. Research is in progress...</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b-2">
-                      <th className="text-left py-3 px-4 font-semibold text-sm">Keyword</th>
-                      <th className="text-left py-3 px-4 font-semibold text-sm">Intent</th>
-                      <th className="text-center py-3 px-4 font-semibold text-sm">Volume</th>
-                      <th className="text-center py-3 px-4 font-semibold text-sm">Difficulty</th>
-                      <th className="text-center py-3 px-4 font-semibold text-sm">Opportunity</th>
-                      <th className="text-center py-3 px-4 font-semibold text-sm">CPC</th>
-                      <th className="text-right py-3 px-4 font-semibold text-sm">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {keywords.map((keyword) => {
-                      const difficultyBadge = getDifficultyBadge(keyword.difficulty)
+        {/* Keywords & Articles Tabs */}
+        <Tabs defaultValue="keywords" className="w-full">
+          <TabsList className="border-2">
+            <TabsTrigger value="keywords" className="flex items-center gap-2">
+              <Key className="h-4 w-4" />
+              Keywords ({project.keywords_count})
+            </TabsTrigger>
+            <TabsTrigger value="articles" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Articles ({project.articles_count})
+            </TabsTrigger>
+          </TabsList>
 
-                      return (
-                        <tr key={keyword.id} className="border-b-2 hover:bg-muted/50 transition-colors">
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2">
-                              {keyword.starred && (
-                                <Star className="h-4 w-4 fill-accent text-accent" />
-                              )}
-                              <span className="font-medium">{keyword.keyword}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <Badge className={getIntentBadge(keyword.intent)}>
-                              {keyword.intent}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {keyword.volume ? keyword.volume.toLocaleString() : "—"}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <Badge className={difficultyBadge.color}>
-                              {difficultyBadge.label} ({keyword.difficulty})
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <TrendingUp className="h-4 w-4 text-success" />
-                              <span className="font-semibold">{keyword.opportunity}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {keyword.cpc ? `$${Number(keyword.cpc).toFixed(2)}` : "—"}
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            {keyword.has_article ? (
-                              <Link href={keyword.article_url}>
-                                <Button size="sm" variant="outline" className="border-2">
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  View Article
-                                </Button>
-                              </Link>
-                            ) : (
-                              <ArticleGenerateForm
-                                keyword={keyword}
-                                createArticleUrl={project.routes.create_article}
-                                hasCredits={auth.user.has_credits}
-                              />
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+          {/* Keywords Tab */}
+          <TabsContent value="keywords">
+            <Card className="border-2">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Keywords</CardTitle>
+                    <CardDescription>
+                      Top keyword opportunities for your content strategy
+                    </CardDescription>
+                  </div>
+                  {activeFiltersCount > 0 && (
+                    <Button variant="outline" size="sm" onClick={clearFilters} className="border-2">
+                      <X className="h-4 w-4 mr-2" />
+                      Clear {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {keywords.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No keywords found yet. Research is in progress...</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Filter Controls */}
+                    <div className="flex flex-col sm:flex-row gap-3 mb-6 p-4 bg-muted/30 rounded-lg border-2">
+                      <div className="flex items-center gap-2">
+                        <Filter className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-semibold text-muted-foreground">Filters:</span>
+                      </div>
 
-            {keywords.length > 0 && (
-              <div className="mt-4 text-sm text-muted-foreground text-center">
-                Showing top {keywords.length} opportunities. {project.keywords_count > keywords.length && `${project.keywords_count - keywords.length} more available.`}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                      {/* Intent Filter */}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant={intentFilter === "all" ? "default" : "outline"}
+                          onClick={() => setIntentFilter("all")}
+                          className="border-2"
+                        >
+                          All Intent
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={intentFilter === "informational" ? "default" : "outline"}
+                          onClick={() => setIntentFilter("informational")}
+                          className="border-2"
+                        >
+                          Informational
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={intentFilter === "commercial" ? "default" : "outline"}
+                          onClick={() => setIntentFilter("commercial")}
+                          className="border-2"
+                        >
+                          Commercial
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={intentFilter === "transactional" ? "default" : "outline"}
+                          onClick={() => setIntentFilter("transactional")}
+                          className="border-2"
+                        >
+                          Transactional
+                        </Button>
+                      </div>
+
+                      {/* Difficulty Filter */}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant={difficultyFilter === "all" ? "default" : "outline"}
+                          onClick={() => setDifficultyFilter("all")}
+                          className="border-2"
+                        >
+                          All Difficulty
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={difficultyFilter === "easy" ? "default" : "outline"}
+                          onClick={() => setDifficultyFilter("easy")}
+                          className="border-2"
+                        >
+                          Easy
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={difficultyFilter === "medium" ? "default" : "outline"}
+                          onClick={() => setDifficultyFilter("medium")}
+                          className="border-2"
+                        >
+                          Medium
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={difficultyFilter === "hard" ? "default" : "outline"}
+                          onClick={() => setDifficultyFilter("hard")}
+                          className="border-2"
+                        >
+                          Hard
+                        </Button>
+                      </div>
+
+                      {/* Sort By */}
+                      <div className="flex items-center gap-2 sm:ml-auto">
+                        <span className="text-sm font-semibold text-muted-foreground">Sort:</span>
+                        <select
+                          value={sortBy}
+                          onChange={(e) => setSortBy(e.target.value)}
+                          className="border-2 border-border rounded-lg px-3 py-1.5 text-sm bg-background"
+                        >
+                          <option value="opportunity">Opportunity</option>
+                          <option value="volume">Volume</option>
+                          <option value="difficulty">Difficulty</option>
+                          <option value="cpc">CPC</option>
+                          <option value="keyword">Keyword A-Z</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b-2">
+                            <th className="text-left py-3 px-4 font-semibold text-sm">Keyword</th>
+                            <th className="text-left py-3 px-4 font-semibold text-sm">Intent</th>
+                            <th className="text-center py-3 px-4 font-semibold text-sm">Volume</th>
+                            <th className="text-center py-3 px-4 font-semibold text-sm">Difficulty</th>
+                            <th className="text-center py-3 px-4 font-semibold text-sm">Opportunity</th>
+                            <th className="text-center py-3 px-4 font-semibold text-sm">CPC</th>
+                            <th className="text-right py-3 px-4 font-semibold text-sm">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredAndSortedKeywords.map((keyword) => {
+                            const difficultyBadge = getDifficultyBadge(keyword.difficulty)
+
+                            return (
+                              <tr key={keyword.id} className="border-b-2 hover:bg-muted/50 transition-colors">
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-2">
+                                    {keyword.starred && (
+                                      <Star className="h-4 w-4 fill-accent text-accent" />
+                                    )}
+                                    <span className="font-medium">{keyword.keyword}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <Badge className={getIntentBadge(keyword.intent)}>
+                                    {keyword.intent}
+                                  </Badge>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  {keyword.volume ? keyword.volume.toLocaleString() : "—"}
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <Badge className={difficultyBadge.color}>
+                                    {difficultyBadge.label} ({keyword.difficulty})
+                                  </Badge>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <TrendingUp className="h-4 w-4 text-success" />
+                                    <span className="font-semibold">{keyword.opportunity}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  {keyword.cpc ? `$${Number(keyword.cpc).toFixed(2)}` : "—"}
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  {keyword.has_article ? (
+                                    <Link href={keyword.article_url}>
+                                      <Button size="sm" variant="outline" className="border-2">
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        View Article
+                                      </Button>
+                                    </Link>
+                                  ) : (
+                                    <Link href={keyword.new_article_url}>
+                                      <Button
+                                        size="sm"
+                                        className="border-2 shadow-md hover:shadow-lg"
+                                        disabled={!auth.user.has_credits}
+                                      >
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Generate Article
+                                      </Button>
+                                    </Link>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {filteredAndSortedKeywords.length > 0 && (
+                      <div className="mt-4 text-sm text-muted-foreground text-center">
+                        Showing {filteredAndSortedKeywords.length} keyword{filteredAndSortedKeywords.length !== 1 ? 's' : ''} {filteredAndSortedKeywords.length < keywords.length && `of ${keywords.length} total`}
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Articles Tab */}
+          <TabsContent value="articles">
+            <Card className="border-2">
+              <CardHeader>
+                <CardTitle>Articles</CardTitle>
+                <CardDescription>
+                  Content generated from your keywords
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {articles.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No articles yet. Generate articles from your keywords above.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {articles.map((article) => (
+                      <Link
+                        key={article.id}
+                        href={article.article_url}
+                        className="flex items-center justify-between p-4 border-2 rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold">{article.title || "Untitled"}</h3>
+                            {getStatusBadge(article.status)}
+                          </div>
+                          <p className="text-sm text-muted-foreground font-mono">
+                            {article.keyword}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-6 text-sm">
+                          {article.word_count > 0 && (
+                            <div className="text-center">
+                              <div className="font-semibold">{article.word_count}</div>
+                              <div className="text-muted-foreground">Words</div>
+                            </div>
+                          )}
+                          <div className="text-muted-foreground">
+                            {formatDate(article.created_at)}
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+
+                {articles.length > 0 && project.articles_count > articles.length && (
+                  <div className="mt-4 text-sm text-muted-foreground text-center">
+                    Showing {articles.length} of {project.articles_count} articles.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   )

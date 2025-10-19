@@ -26,8 +26,8 @@ class SerpScraperService
 
       # Try common PAA selectors
       paa_questions += doc.css('[jsname="yEVEE"]').map(&:text)
-      paa_questions += doc.css('.related-question-pair span').map(&:text)
-      paa_questions += doc.css('[role="heading"]').map(&:text).select { |q| q.include?('?') }
+      paa_questions += doc.css(".related-question-pair span").map(&:text)
+      paa_questions += doc.css('[role="heading"]').map(&:text).select { |q| q.include?("?") }
 
       paa_questions = paa_questions.compact.uniq.reject(&:empty?)
 
@@ -57,9 +57,9 @@ class SerpScraperService
       related = []
 
       # Try common related search selectors
-      related += doc.css('.k8XOCe').map(&:text)
-      related += doc.css('.s75CSd').map(&:text)
-      related += doc.css('[data-ved] a').map(&:text).select { |t| t.length > 10 && t.length < 100 }
+      related += doc.css(".k8XOCe").map(&:text)
+      related += doc.css(".s75CSd").map(&:text)
+      related += doc.css("[data-ved] a").map(&:text).select { |t| t.length > 10 && t.length < 100 }
 
       related = related.compact.uniq.reject(&:empty?).map(&:downcase)
 
@@ -89,14 +89,14 @@ class SerpScraperService
       results = []
 
       # Try to find result divs (Google's structure changes frequently)
-      doc.css('div.g, div[data-sokoban-container]').each do |result_div|
-        title_element = result_div.at_css('h3')
-        link_element = result_div.at_css('a')
+      doc.css("div.g, div[data-sokoban-container]").each do |result_div|
+        title_element = result_div.at_css("h3")
+        link_element = result_div.at_css("a")
 
         next unless title_element && link_element
 
-        url = link_element['href']
-        next unless url&.start_with?('http')
+        url = link_element["href"]
+        next unless url&.start_with?("http")
 
         results << {
           title: title_element.text.strip,

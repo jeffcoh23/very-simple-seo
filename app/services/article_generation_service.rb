@@ -4,19 +4,27 @@ class ArticleGenerationService
   def initialize(article)
     @article = article
     @keyword = article.keyword
+    @project = article.project
   end
 
   def perform
     total_cost = 0.0
 
     begin
-      # Step 1: SERP Research
       @article.update!(status: :generating, started_at: Time.current)
       Rails.logger.info "=" * 80
       Rails.logger.info "ARTICLE GENERATION: #{@keyword.keyword}"
       Rails.logger.info "=" * 80
 
-      serp_result = perform_serp_research
+      # Step 1: SERP Research
+      # SWITCH BETWEEN OLD AND NEW APPROACH HERE:
+
+      # NEW: Google Grounding (recommended) - uncomment to use
+      serp_result = perform_grounding_research
+
+      # OLD: HTML Scraping (fallback) - uncomment to use
+      # serp_result = perform_serp_research
+
       total_cost += serp_result[:cost]
 
       if serp_result[:data].nil?
@@ -63,8 +71,8 @@ class ArticleGenerationService
       word_count = improvement_result[:data].split.size
 
       # Extract title and meta from outline
-      title = outline_result[:data]['title']
-      meta_description = outline_result[:data]['meta_description']
+      title = outline_result[:data]["title"]
+      meta_description = outline_result[:data]["meta_description"]
 
       @article.update!(
         title: title,
@@ -91,8 +99,18 @@ class ArticleGenerationService
 
   private
 
+  # NEW: Google Grounding research
+  def perform_grounding_research
+    Rails.logger.info "\n[1/4] Grounding Research (NEW)"
+    Rails.logger.info "-" * 40
+
+    service = SerpGroundingResearchService.new(@keyword.keyword, project: @project)
+    service.perform
+  end
+
+  # OLD: HTML scraping research
   def perform_serp_research
-    Rails.logger.info "\n[1/4] SERP Research"
+    Rails.logger.info "\n[1/4] SERP Research (OLD - HTML Scraping)"
     Rails.logger.info "-" * 40
 
     service = SerpResearchService.new(@keyword.keyword)
@@ -104,7 +122,7 @@ class ArticleGenerationService
     Rails.logger.info "-" * 40
 
     voice_profile = @article.project.respond_to?(:voice_profile) ? @article.project.voice_profile : nil
-    service = ArticleOutlineService.new(@keyword.keyword, serp_data, voice_profile: voice_profile)
+    service = ArticleOutlineService.new(@keyword.keyword, serp_data, voice_profile: voice_profile, project: @project)
     service.perform
   end
 
@@ -113,7 +131,7 @@ class ArticleGenerationService
     Rails.logger.info "-" * 40
 
     voice_profile = @article.project.respond_to?(:voice_profile) ? @article.project.voice_profile : nil
-    service = ArticleWriterService.new(@keyword.keyword, outline, serp_data, voice_profile: voice_profile)
+    service = ArticleWriterService.new(@keyword.keyword, outline, serp_data, voice_profile: voice_profile, project: @project)
     service.perform
   end
 
@@ -121,7 +139,7 @@ class ArticleGenerationService
     Rails.logger.info "\n[4/4] Improving Article"
     Rails.logger.info "-" * 40
 
-    service = ArticleImprovementService.new(markdown, serp_data)
+    service = ArticleImprovementService.new(markdown, serp_data, project: @project)
     service.perform
   end
 

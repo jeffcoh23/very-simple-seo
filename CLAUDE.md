@@ -308,13 +308,13 @@ export default function Example() {
 
 ---
 
-## 9) AI Validator Specific Notes
+## 9) VerySimpleSEO Development Notes
 
-**IMPORTANT: This is an idea validation tool, NOT a pricing tool.**
-- Never focus on pricing, costs, or subscription concerns in persona generation or conversations
-- Focus on problem-solution fit, market need, and genuine user interest
-- Objections should be about: timing, effectiveness, competing priorities, satisfaction with status quo
-- NOT about: "too expensive", "budget constraints", "can't afford it"
+**CRITICAL: This is a GENERIC SaaS SEO tool, NOT just for SignalLab**
+- Service code MUST work for ANY SaaS project (not hardcoded for one brand)
+- Always use `project.name`, `project.domain`, `project.call_to_actions` (dynamic)
+- NEVER hardcode "SignalLab" or specific brand names in service code
+- Article generation rules belong in service PROMPTS, not here
 
 ## 10) Roadmaps
 

@@ -45,7 +45,7 @@ class KeywordMetricsService
             }
           else
             # Fall back to heuristics for this keyword
-            new(kw_lower).calculate
+            new(kw_lower).calculate.merge(keyword: kw_lower)
           end
         end
       end
@@ -55,31 +55,52 @@ class KeywordMetricsService
     keywords.map { |kw| new(kw).calculate.merge(keyword: kw.downcase.strip) }
   end
 
-  def self.calculate_opportunity(metrics)
-    # Opportunity score: balance between volume and difficulty
-    # Higher volume + lower difficulty = higher opportunity
+  def self.calculate_opportunity(metrics, semantic_similarity: nil)
+    # Multi-factor opportunity score balancing:
+    # - Volume (40%): Traffic potential, capped at 2000 to prevent mega-volume dominance
+    # - Difficulty (30%): Ranking feasibility (inverted: easier = higher score)
+    # - Semantic Relevance (30%): Domain fit (prioritizes relevant keywords)
 
-    volume_score = normalize(metrics[:volume], max: 500) # Normalize to 0-100
-    difficulty_inverse = 100 - metrics[:difficulty] # Invert difficulty
+    # Return nil if we don't have the required metrics
+    return nil unless metrics[:volume] && metrics[:difficulty]
 
-    # Weighted average (favor volume slightly)
-    opportunity = (volume_score * 0.6) + (difficulty_inverse * 0.4)
+    # Factor 1: Volume Score (0-40 points)
+    # Cap at 2000 so mega-volume keywords don't max out
+    volume_score = normalize(metrics[:volume], max: 2000) * 0.4
 
-    # Boost for good intent
-    opportunity += 5 if ["informational", "educational"].include?(metrics[:intent])
-    opportunity += 10 if metrics[:intent] == "commercial"
+    # Factor 2: Difficulty Score (0-30 points)
+    # Invert: easier = higher score
+    difficulty_score = (100 - metrics[:difficulty]) * 0.3
 
-    # Penalty for very low volume
+    # Factor 3: Semantic Relevance Score (0-30 points)
+    # Higher relevance to domain = higher score
+    relevance_score = semantic_similarity ? (semantic_similarity * 30) : 0
+
+    # Base opportunity
+    opportunity = volume_score + difficulty_score + relevance_score
+
+    # Smart Penalty: Mega-volume + low relevance = generic keyword
+    # Catches keywords like "ai tools", "business ideas" that have high volume but aren't specific to domain
+    if metrics[:volume] > 10000 && semantic_similarity && semantic_similarity < 0.4
+      opportunity -= 20
+      Rails.logger.info "  ⚠️  Penalized mega-volume low-relevance: #{metrics[:keyword]} (vol: #{metrics[:volume]}, sim: #{semantic_similarity.round(3)})"
+    end
+
+    # Penalty: Ultra-low volume keywords
     opportunity -= 20 if metrics[:volume] < 50
 
-    [[opportunity, 0].max, 100].min.round
+    # Bonus: Commercial intent (more likely to convert)
+    opportunity += 10 if metrics[:intent] == "commercial"
+    opportunity += 5 if [ "informational", "educational" ].include?(metrics[:intent])
+
+    [ [ opportunity, 0 ].max, 100 ].min.round
   end
 
   private
 
   def fetch_google_ads_metrics
     google_ads = GoogleAdsService.new
-    real_metrics = google_ads.get_keyword_metrics([@keyword])
+    real_metrics = google_ads.get_keyword_metrics([ @keyword ])
 
     return nil unless real_metrics && real_metrics[@keyword]
 
@@ -122,7 +143,7 @@ class KeywordMetricsService
     # Template/checklist = moderate volume
     base += 60 if @keyword.include?("template") || @keyword.include?("checklist")
 
-    [base, 10].max # Minimum 10
+    [ base, 10 ].max # Minimum 10
   end
 
   def estimate_difficulty
@@ -150,7 +171,7 @@ class KeywordMetricsService
     # Very specific = easier
     difficulty -= 15 if @keyword.split.size >= 6
 
-    [[difficulty, 0].max, 100].min # Clamp between 0-100
+    [ [ difficulty, 0 ].max, 100 ].min # Clamp between 0-100
   end
 
   def estimate_cpc
@@ -163,7 +184,7 @@ class KeywordMetricsService
     base_cpc += 0.25 if @keyword.include?("best")
     base_cpc += 0.50 if @keyword.include?("seo")
 
-    [base_cpc, 0.10].max.round(2)
+    [ base_cpc, 0.10 ].max.round(2)
   end
 
   def determine_intent
@@ -179,7 +200,8 @@ class KeywordMetricsService
   end
 
   def self.normalize(value, max:)
-    # Normalize value to 0-100 scale
-    ((value.to_f / max) * 100).round
+    # Normalize value to 0-100 scale, clamping at max
+    normalized = ((value.to_f / max) * 100).round
+    [ normalized, 100 ].min # Cap at 100
   end
 end

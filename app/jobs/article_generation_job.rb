@@ -36,7 +36,7 @@ class ArticleGenerationJob < ApplicationJob
     end
 
     @article.update!(outline: outline_result[:data])
-    target_words = outline_result[:data]['sections']&.sum { |s| s['target_word_count'] || 0 } || 2000
+    target_words = outline_result[:data]["sections"]&.sum { |s| s["target_word_count"] || 0 } || 2000
     broadcast_progress("✅ Outline created (targeting #{target_words} words)")
 
     # Step 3: Write Article
@@ -69,8 +69,8 @@ class ArticleGenerationJob < ApplicationJob
     final_word_count = improvement_result[:data].split.size
 
     # Extract title and meta from outline
-    title = outline_result[:data]['title']
-    meta_description = outline_result[:data]['meta_description']
+    title = outline_result[:data]["title"]
+    meta_description = outline_result[:data]["meta_description"]
 
     @article.update!(
       title: title,

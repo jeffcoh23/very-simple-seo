@@ -1,5 +1,5 @@
 class EmailVerificationController < ApplicationController
-  allow_unauthenticated_access only: [:show]
+  allow_unauthenticated_access only: [ :show ]
 
   def show
     if user = User.find_by_token_for(:email_verification, params[:token])

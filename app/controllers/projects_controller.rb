@@ -1,6 +1,6 @@
 # app/controllers/projects_controller.rb
 class ProjectsController < ApplicationController
-  before_action :set_project, only: [:show, :edit, :update, :destroy]
+  before_action :set_project, only: [ :show, :edit, :update, :destroy ]
 
   # GET /projects
   def index
@@ -39,11 +39,13 @@ class ProjectsController < ApplicationController
     # Get the latest keyword research
     @keyword_research = @project.keyword_researches.order(created_at: :desc).first
     @keywords = @project.keywords.by_opportunity.limit(50)
+    @articles = @project.articles.order(created_at: :desc).limit(20)
 
     render inertia: "App/Projects/Show", props: {
       project: project_props(@project).merge(routes: project_routes(@project)),
       keywordResearch: @keyword_research ? keyword_research_props(@keyword_research) : nil,
-      keywords: @keywords.map { |k| keyword_props(k) }
+      keywords: @keywords.map { |k| keyword_props(k) },
+      articles: @articles.map { |a| article_props(a) }
     }
   end
 
@@ -108,8 +110,8 @@ class ProjectsController < ApplicationController
       :sitemap_url,
       :description,
       seed_keywords: [],
-      call_to_actions: [:text, :url],
-      competitors: [:domain, :title, :description, :source]
+      call_to_actions: [ :text, :url ],
+      competitors: [ :domain, :title, :description, :source ]
     )
   end
 
@@ -131,7 +133,7 @@ class ProjectsController < ApplicationController
       domain = competitor_data[:domain]
       title = competitor_data[:title]
       description = competitor_data[:description]
-      source = competitor_data[:source] || 'manual'
+      source = competitor_data[:source] || "manual"
 
       # Find existing or create new
       competitor = @project.competitors.find_or_initialize_by(domain: domain)
@@ -187,7 +189,20 @@ class ProjectsController < ApplicationController
       starred: keyword.starred,
       has_article: keyword.article.present?,
       article_id: keyword.article&.id,
-      article_url: keyword.article.present? ? article_path(keyword.article) : nil
+      article_url: keyword.article.present? ? article_path(keyword.article) : nil,
+      new_article_url: new_keyword_article_path(keyword.id)
+    }
+  end
+
+  def article_props(article)
+    {
+      id: article.id,
+      title: article.title,
+      status: article.status,
+      word_count: article.word_count,
+      keyword: article.keyword.keyword,
+      created_at: article.created_at,
+      article_url: article_path(article)
     }
   end
 end
