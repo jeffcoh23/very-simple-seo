@@ -6,7 +6,7 @@ class Project < ApplicationRecord
   has_many :articles, dependent: :destroy
 
   validates :name, presence: true
-  validates :domain, presence: true, format: { with: URI::regexp(%w[http https]) }
+  validates :domain, presence: true, format: { with: URI.regexp(%w[http https]) }
 
   # Tone of voice options
   TONE_OPTIONS = [

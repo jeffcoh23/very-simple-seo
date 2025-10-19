@@ -2,9 +2,9 @@
 # Scrapes sitemap.xml (or fallback strategies) to discover all pages on a site
 # Extracts metadata (title, description, headings) for internal link suggestions
 class SitemapScraperService
-  require 'net/http'
-  require 'zlib'
-  require 'nokogiri'
+  require "net/http"
+  require "zlib"
+  require "nokogiri"
 
   def initialize(project)
     @project = project
@@ -33,10 +33,10 @@ class SitemapScraperService
     # Store in project
     @project.update!(
       internal_content_index: {
-        'pages' => scraped_pages,
-        'last_scraped' => Time.current.iso8601,
-        'discovery_method' => @discovery_method,
-        'total_pages' => scraped_pages.size
+        "pages" => scraped_pages,
+        "last_scraped" => Time.current.iso8601,
+        "discovery_method" => @discovery_method,
+        "total_pages" => scraped_pages.size
       }
     )
 
@@ -62,17 +62,17 @@ class SitemapScraperService
       return nil unless response
 
       # Handle gzipped sitemaps
-      xml_content = if sitemap_url.end_with?('.gz')
+      xml_content = if sitemap_url.end_with?(".gz")
         Zlib::GzipReader.new(StringIO.new(response.body)).read
       else
         response.body
       end
 
       doc = Nokogiri::XML(xml_content)
-      urls = doc.xpath('//xmlns:url/xmlns:loc').map(&:text)
+      urls = doc.xpath("//xmlns:url/xmlns:loc").map(&:text)
 
       if urls.any?
-        @discovery_method = 'sitemap.xml'
+        @discovery_method = "sitemap.xml"
         Rails.logger.info "Found #{urls.size} URLs via sitemap.xml"
         return urls
       end
@@ -88,7 +88,7 @@ class SitemapScraperService
   def try_sitemap_index
     Rails.logger.info "Trying sitemap index discovery..."
 
-    sitemap_index_url = @project.sitemap_url&.gsub('sitemap.xml', 'sitemap_index.xml') ||
+    sitemap_index_url = @project.sitemap_url&.gsub("sitemap.xml", "sitemap_index.xml") ||
                         "#{@project.domain}/sitemap_index.xml"
 
     begin
@@ -96,7 +96,7 @@ class SitemapScraperService
       return nil unless response
 
       doc = Nokogiri::XML(response.body)
-      sitemap_urls = doc.xpath('//xmlns:sitemap/xmlns:loc').map(&:text)
+      sitemap_urls = doc.xpath("//xmlns:sitemap/xmlns:loc").map(&:text)
 
       if sitemap_urls.any?
         all_urls = []
@@ -105,12 +105,12 @@ class SitemapScraperService
           next unless sitemap_response
 
           sitemap_doc = Nokogiri::XML(sitemap_response.body)
-          urls = sitemap_doc.xpath('//xmlns:url/xmlns:loc').map(&:text)
+          urls = sitemap_doc.xpath("//xmlns:url/xmlns:loc").map(&:text)
           all_urls.concat(urls)
         end
 
         if all_urls.any?
-          @discovery_method = 'sitemap_index'
+          @discovery_method = "sitemap_index"
           Rails.logger.info "Found #{all_urls.size} URLs via sitemap index"
           return all_urls
         end
@@ -142,10 +142,10 @@ class SitemapScraperService
         return nil unless sitemap_response
 
         doc = Nokogiri::XML(sitemap_response.body)
-        urls = doc.xpath('//xmlns:url/xmlns:loc').map(&:text)
+        urls = doc.xpath("//xmlns:url/xmlns:loc").map(&:text)
 
         if urls.any?
-          @discovery_method = 'robots.txt'
+          @discovery_method = "robots.txt"
           Rails.logger.info "Found #{urls.size} URLs via robots.txt sitemap"
           return urls
         end
@@ -163,21 +163,21 @@ class SitemapScraperService
     Rails.logger.info "Trying common path discovery (no sitemap found)..."
 
     common_paths = [
-      '/blog',
-      '/articles',
-      '/pricing',
-      '/features',
-      '/about',
-      '/contact',
-      '/guides',
-      '/resources',
-      '/docs',
-      '/help',
-      '/support',
-      '/faq',
-      '/use-cases',
-      '/solutions',
-      '/product'
+      "/blog",
+      "/articles",
+      "/pricing",
+      "/features",
+      "/about",
+      "/contact",
+      "/guides",
+      "/resources",
+      "/docs",
+      "/help",
+      "/support",
+      "/faq",
+      "/use-cases",
+      "/solutions",
+      "/product"
     ]
 
     discovered_urls = []
@@ -187,7 +187,7 @@ class SitemapScraperService
       url = "#{@project.domain}#{path}"
       begin
         response = fetch_url(url, follow_redirects: false)
-        if response && response.code == '200'
+        if response && response.code == "200"
           discovered_urls << url
           Rails.logger.info "Found: #{url}"
         end
@@ -203,7 +203,7 @@ class SitemapScraperService
     end
 
     if discovered_urls.any?
-      @discovery_method = 'common_paths'
+      @discovery_method = "common_paths"
       Rails.logger.info "Found #{discovered_urls.size} URLs via common paths"
       return discovered_urls
     end
@@ -221,8 +221,8 @@ class SitemapScraperService
     doc = Nokogiri::HTML(response.body)
 
     # Find all links that look like blog posts
-    links = doc.css('a[href]').map { |link| link['href'] }
-                              .select { |href| href.include?('/blog/') }
+    links = doc.css("a[href]").map { |link| link["href"] }
+                              .select { |href| href.include?("/blog/") }
                               .map { |href| normalize_url(href) }
                               .uniq
                               .take(20)  # Limit to 20 blog posts
@@ -244,12 +244,12 @@ class SitemapScraperService
         doc = Nokogiri::HTML(response.body)
 
         {
-          'url' => url,
-          'title' => extract_title(doc),
-          'meta_description' => extract_meta_description(doc),
-          'headings' => extract_headings(doc),
-          'summary' => extract_summary(doc),
-          'scraped_at' => Time.current.iso8601
+          "url" => url,
+          "title" => extract_title(doc),
+          "meta_description" => extract_meta_description(doc),
+          "headings" => extract_headings(doc),
+          "summary" => extract_summary(doc),
+          "scraped_at" => Time.current.iso8601
         }
       rescue => e
         Rails.logger.warn "Failed to scrape #{url}: #{e.message}"
@@ -259,46 +259,46 @@ class SitemapScraperService
   end
 
   def extract_title(doc)
-    doc.at_css('title')&.text&.strip ||
-    doc.at_css('h1')&.text&.strip ||
-    'Untitled'
+    doc.at_css("title")&.text&.strip ||
+    doc.at_css("h1")&.text&.strip ||
+    "Untitled"
   end
 
   def extract_meta_description(doc)
-    doc.at_css('meta[name="description"]')&.[]('content')&.strip ||
-    doc.at_css('meta[property="og:description"]')&.[]('content')&.strip ||
-    ''
+    doc.at_css('meta[name="description"]')&.[]("content")&.strip ||
+    doc.at_css('meta[property="og:description"]')&.[]("content")&.strip ||
+    ""
   end
 
   def extract_headings(doc)
-    h2s = doc.css('h2').map { |h| h.text.strip }.reject(&:empty?)
-    h3s = doc.css('h3').map { |h| h.text.strip }.reject(&:empty?)
+    h2s = doc.css("h2").map { |h| h.text.strip }.reject(&:empty?)
+    h3s = doc.css("h3").map { |h| h.text.strip }.reject(&:empty?)
     (h2s + h3s).take(10)  # Top 10 headings
   end
 
   def extract_summary(doc)
     # Get first paragraph
-    first_p = doc.css('p').find { |p| p.text.strip.length > 50 }
-    first_p&.text&.strip&.[](0..300) || ''
+    first_p = doc.css("p").find { |p| p.text.strip.length > 50 }
+    first_p&.text&.strip&.[](0..300) || ""
   end
 
   def fetch_url(url, follow_redirects: true, max_redirects: 5)
     uri = URI.parse(url)
 
     http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = (uri.scheme == 'https')
+    http.use_ssl = (uri.scheme == "https")
     http.open_timeout = 10
     http.read_timeout = 10
 
     request = Net::HTTP::Get.new(uri.request_uri)
-    request['User-Agent'] = 'VerySimpleSEO Content Discovery Bot/1.0'
+    request["User-Agent"] = "VerySimpleSEO Content Discovery Bot/1.0"
 
     response = http.request(request)
 
     # Handle redirects
     if follow_redirects && response.is_a?(Net::HTTPRedirection) && max_redirects > 0
-      redirect_url = response['location']
-      redirect_url = URI.join(url, redirect_url).to_s unless redirect_url.start_with?('http')
+      redirect_url = response["location"]
+      redirect_url = URI.join(url, redirect_url).to_s unless redirect_url.start_with?("http")
       return fetch_url(redirect_url, follow_redirects: true, max_redirects: max_redirects - 1)
     end
 
@@ -311,10 +311,10 @@ class SitemapScraperService
   end
 
   def normalize_url(href)
-    return href if href.start_with?('http')
+    return href if href.start_with?("http")
 
     # Handle relative URLs
-    if href.start_with?('/')
+    if href.start_with?("/")
       "#{@project.domain}#{href}"
     else
       "#{@project.domain}/#{href}"

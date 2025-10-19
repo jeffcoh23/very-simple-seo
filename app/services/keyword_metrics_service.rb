@@ -91,16 +91,16 @@ class KeywordMetricsService
 
     # Bonus: Commercial intent (more likely to convert)
     opportunity += 10 if metrics[:intent] == "commercial"
-    opportunity += 5 if ["informational", "educational"].include?(metrics[:intent])
+    opportunity += 5 if [ "informational", "educational" ].include?(metrics[:intent])
 
-    [[opportunity, 0].max, 100].min.round
+    [ [ opportunity, 0 ].max, 100 ].min.round
   end
 
   private
 
   def fetch_google_ads_metrics
     google_ads = GoogleAdsService.new
-    real_metrics = google_ads.get_keyword_metrics([@keyword])
+    real_metrics = google_ads.get_keyword_metrics([ @keyword ])
 
     return nil unless real_metrics && real_metrics[@keyword]
 
@@ -143,7 +143,7 @@ class KeywordMetricsService
     # Template/checklist = moderate volume
     base += 60 if @keyword.include?("template") || @keyword.include?("checklist")
 
-    [base, 10].max # Minimum 10
+    [ base, 10 ].max # Minimum 10
   end
 
   def estimate_difficulty
@@ -171,7 +171,7 @@ class KeywordMetricsService
     # Very specific = easier
     difficulty -= 15 if @keyword.split.size >= 6
 
-    [[difficulty, 0].max, 100].min # Clamp between 0-100
+    [ [ difficulty, 0 ].max, 100 ].min # Clamp between 0-100
   end
 
   def estimate_cpc
@@ -184,7 +184,7 @@ class KeywordMetricsService
     base_cpc += 0.25 if @keyword.include?("best")
     base_cpc += 0.50 if @keyword.include?("seo")
 
-    [base_cpc, 0.10].max.round(2)
+    [ base_cpc, 0.10 ].max.round(2)
   end
 
   def determine_intent
@@ -202,6 +202,6 @@ class KeywordMetricsService
   def self.normalize(value, max:)
     # Normalize value to 0-100 scale, clamping at max
     normalized = ((value.to_f / max) * 100).round
-    [normalized, 100].min # Cap at 100
+    [ normalized, 100 ].min # Cap at 100
   end
 end

@@ -196,7 +196,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     article = project.articles.create!(keyword: keyword, status: :pending)
     competitor = project.competitors.create!(domain: "https://competitor.com")
 
-    assert_difference(["KeywordResearch.count", "Keyword.count", "Article.count", "Competitor.count"], -1) do
+    assert_difference([ "KeywordResearch.count", "Keyword.count", "Article.count", "Competitor.count" ], -1) do
       delete "/projects/#{project.id}"
     end
   end

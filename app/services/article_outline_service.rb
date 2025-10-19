@@ -27,16 +27,16 @@ class ArticleOutlineService
   private
 
   def generate_outline
-    common_topics = @serp_data['common_topics']&.join(', ') || 'general information'
-    content_gaps = @serp_data['content_gaps']&.join(', ') || 'unique insights'
-    avg_word_count = @serp_data['average_word_count'] || 2000
+    common_topics = @serp_data["common_topics"]&.join(", ") || "general information"
+    content_gaps = @serp_data["content_gaps"]&.join(", ") || "unique insights"
+    avg_word_count = @serp_data["average_word_count"] || 2000
 
     # Use user-provided target_word_count, or calculate based on competitors
-    target_word_count = @target_word_count || [avg_word_count * 1.2, 2000].max.to_i
+    target_word_count = @target_word_count || [ avg_word_count * 1.2, 2000 ].max.to_i
 
     # Get example companies and stats from SERP data
-    examples = @serp_data['detailed_examples'] || []
-    statistics = @serp_data['statistics'] || []
+    examples = @serp_data["detailed_examples"] || []
+    statistics = @serp_data["statistics"] || []
 
     examples_preview = examples.take(5).map { |ex|
       "- #{ex['company']}: #{ex['what_they_did']} → #{ex['outcome']}"
@@ -47,10 +47,10 @@ class ArticleOutlineService
     }.join("\n")
 
     # NEW: Get FAQs, People Also Ask, and internal linking data
-    faqs = @serp_data['faqs'] || []
-    people_also_ask = @serp_data['people_also_ask'] || []
-    internal_links = @serp_data['internal_link_opportunities'] || []
-    cta_placements = @serp_data['cta_placements'] || []
+    faqs = @serp_data["faqs"] || []
+    people_also_ask = @serp_data["people_also_ask"] || []
+    internal_links = @serp_data["internal_link_opportunities"] || []
+    cta_placements = @serp_data["cta_placements"] || []
 
     faqs_preview = faqs.take(5).map { |faq|
       "- Q: #{faq['question']}\n  A: #{faq['answer'][0..100]}..."
@@ -204,7 +204,7 @@ class ArticleOutlineService
 
     client = Ai::ClientService.for_outline_generation
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 8000, # Increased from 4000 to handle larger outlines
       temperature: 0.7
     )
@@ -220,13 +220,13 @@ class ArticleOutlineService
     outline = JSON.parse(json_str)
 
     # Validate outline structure
-    unless outline['sections'].is_a?(Array) && outline['sections'].size >= 4
+    unless outline["sections"].is_a?(Array) && outline["sections"].size >= 4
       Rails.logger.error "Invalid outline: insufficient sections"
       return nil
     end
 
     # Ensure has_faq_section is set (for backward compatibility with old outlines)
-    outline['has_faq_section'] ||= outline.key?('faq_section')
+    outline["has_faq_section"] ||= outline.key?("faq_section")
 
     outline
   rescue JSON::ParserError => e

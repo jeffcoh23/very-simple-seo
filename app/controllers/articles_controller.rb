@@ -1,8 +1,8 @@
 # app/controllers/articles_controller.rb
 class ArticlesController < ApplicationController
-  before_action :set_article, only: [:show, :destroy, :export, :retry, :regenerate]
-  before_action :set_project, only: [:create]
-  before_action :set_keyword, only: [:new]
+  before_action :set_article, only: [ :show, :destroy, :export, :retry, :regenerate ]
+  before_action :set_project, only: [ :create ]
+  before_action :set_keyword, only: [ :new ]
 
   # GET /keywords/:id/generate
   def new
@@ -148,7 +148,7 @@ class ArticlesController < ApplicationController
 
   def sanitize_filename(filename)
     # Remove special characters and limit length
-    filename.gsub(/[^0-9A-Za-z.\-]/, '_').truncate(100, omission: '')
+    filename.gsub(/[^0-9A-Za-z.\-]/, "_").truncate(100, omission: "")
   end
 
   # Serialization helpers

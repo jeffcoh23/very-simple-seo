@@ -55,12 +55,12 @@ class SerpResearchService
     end
 
     # Add all extracted data
-    final_analysis['detailed_examples'] = all_examples
-    final_analysis['statistics'] = all_stats
-    final_analysis['visual_elements'] = visual_elements
-    final_analysis['comparison_tables'] = comparison_tables
-    final_analysis['step_by_step_guides'] = step_by_step_guides
-    final_analysis['downloadable_resources'] = downloadable_resources
+    final_analysis["detailed_examples"] = all_examples
+    final_analysis["statistics"] = all_stats
+    final_analysis["visual_elements"] = visual_elements
+    final_analysis["comparison_tables"] = comparison_tables
+    final_analysis["step_by_step_guides"] = step_by_step_guides
+    final_analysis["downloadable_resources"] = downloadable_resources
 
     Rails.logger.info "SERP research complete"
 
@@ -75,8 +75,8 @@ class SerpResearchService
   private
 
   def scrape_google
-    api_key = ENV['GOOGLE_SEARCH_KEY']
-    cx = ENV['GOOGLE_SEARCH_CX'] || '017576662512468239146:omuauf_lfve'
+    api_key = ENV["GOOGLE_SEARCH_KEY"]
+    cx = ENV["GOOGLE_SEARCH_CX"] || "017576662512468239146:omuauf_lfve"
 
     if api_key.blank?
       Rails.logger.error "GOOGLE_SEARCH_KEY not configured"
@@ -88,29 +88,29 @@ class SerpResearchService
 
     # Fetch 2 pages (20 results total) for better competitor coverage
     # Google Custom Search API max is 10 per request
-    [1, 11].each do |start_index|
+    [ 1, 11 ].each do |start_index|
       url = "https://www.googleapis.com/customsearch/v1?key=#{api_key}&cx=#{cx}&q=#{query}&num=10&start=#{start_index}"
 
       uri = URI(url)
       response = Net::HTTP.get_response(uri)
 
-      unless response.code == '200'
+      unless response.code == "200"
         Rails.logger.error "Google API error: #{response.code}"
         next
       end
 
       data = JSON.parse(response.body)
 
-      if data['error']
+      if data["error"]
         Rails.logger.error "Google API error: #{data['error']['message']}"
         next
       end
 
-      (data['items'] || []).each do |item|
+      (data["items"] || []).each do |item|
         results << {
-          title: item['title'],
-          url: item['link'],
-          snippet: item['snippet'] || ""
+          title: item["title"],
+          url: item["link"],
+          snippet: item["snippet"] || ""
         }
       end
 
@@ -133,25 +133,25 @@ class SerpResearchService
         Rails.logger.info "Fetching article #{i+1}/#{urls.size}"
 
         uri = URI(result[:url])
-        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https',
+        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https",
                                    open_timeout: 5, read_timeout: 10) do |http|
           request = Net::HTTP::Get.new(uri)
           request["User-Agent"] = USER_AGENT
           http.request(request)
         end
 
-        next unless response.code == '200'
+        next unless response.code == "200"
 
         doc = Nokogiri::HTML(response.body)
 
         # Remove scripts, styles, nav, footer
-        doc.css('script, style, nav, footer, header, aside, iframe').remove
+        doc.css("script, style, nav, footer, header, aside, iframe").remove
 
         # Try to find main content
-        main_content = doc.at_css('article') || doc.at_css('main') || doc.at_css('[role="main"]') || doc.at_css('body')
+        main_content = doc.at_css("article") || doc.at_css("main") || doc.at_css('[role="main"]') || doc.at_css("body")
 
         # Extract text
-        text = main_content.text.gsub(/\s+/, ' ').strip
+        text = main_content.text.gsub(/\s+/, " ").strip
 
         articles << {
           url: result[:url],
@@ -221,7 +221,7 @@ class SerpResearchService
 
     client = Ai::ClientService.for_serp_analysis
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 8000,
       temperature: 0.7
     )
@@ -232,7 +232,7 @@ class SerpResearchService
     return { examples: [], stats: [] } if json_str.nil?
 
     data = JSON.parse(json_str)
-    { examples: data['examples'] || [], stats: data['stats'] || [] }
+    { examples: data["examples"] || [], stats: data["stats"] || [] }
   rescue => e
     Rails.logger.error "Batch #{batch_num} failed: #{e.message}"
     { examples: [], stats: [] }
@@ -265,7 +265,7 @@ class SerpResearchService
 
     client = Ai::ClientService.for_serp_analysis
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 4000,
       temperature: 0.7
     )
@@ -292,43 +292,43 @@ class SerpResearchService
       begin
         # Re-fetch to get full HTML with images/videos
         uri = URI(article[:url])
-        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https',
+        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https",
                                    open_timeout: 5, read_timeout: 10) do |http|
           request = Net::HTTP::Get.new(uri)
           request["User-Agent"] = USER_AGENT
           http.request(request)
         end
 
-        next unless response.code == '200'
+        next unless response.code == "200"
 
         doc = Nokogiri::HTML(response.body)
 
         # Extract images (skip tiny logos/icons)
-        doc.css('img').each do |img|
-          src = img['src']
-          alt = img['alt'] || ''
+        doc.css("img").each do |img|
+          src = img["src"]
+          alt = img["alt"] || ""
           next if src.nil? || src.empty?
 
           # Skip small images (likely logos)
-          width = img['width'].to_i
-          height = img['height'].to_i
+          width = img["width"].to_i
+          height = img["height"].to_i
           next if width > 0 && width < 200
 
           all_images << {
-            url: src.start_with?('http') ? src : URI.join(article[:url], src).to_s,
+            url: src.start_with?("http") ? src : URI.join(article[:url], src).to_s,
             alt: alt,
             context: img.parent.text[0..100]
           }
         end
 
         # Extract YouTube/Vimeo embeds
-        doc.css('iframe').each do |iframe|
-          src = iframe['src'] || ''
-          next unless src.include?('youtube') || src.include?('vimeo')
+        doc.css("iframe").each do |iframe|
+          src = iframe["src"] || ""
+          next unless src.include?("youtube") || src.include?("vimeo")
 
           all_videos << {
-            url: src.start_with?('http') ? src : URI.join(article[:url], src).to_s,
-            title: iframe['title'] || ''
+            url: src.start_with?("http") ? src : URI.join(article[:url], src).to_s,
+            title: iframe["title"] || ""
           }
         end
       rescue => e
@@ -342,13 +342,13 @@ class SerpResearchService
 
     Rails.logger.info "Found #{all_images.size} images and #{all_videos.size} videos"
 
-    return { 'images' => [], 'videos' => [] } if all_images.empty? && all_videos.empty?
+    return { "images" => [], "videos" => [] } if all_images.empty? && all_videos.empty?
 
     # AI filters for relevance
     filter_relevant_visuals(all_images, all_videos)
   rescue => e
     Rails.logger.error "Visual extraction failed: #{e.message}"
-    { 'images' => [], 'videos' => [] }
+    { "images" => [], "videos" => [] }
   end
 
   def filter_relevant_visuals(images, videos)
@@ -387,20 +387,20 @@ class SerpResearchService
 
     client = Ai::ClientService.for_serp_analysis
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 2000,
       temperature: 0.7
     )
 
-    return { 'images' => [], 'videos' => [] } unless response[:success]
+    return { "images" => [], "videos" => [] } unless response[:success]
 
     json_str = extract_json(response[:content])
-    return { 'images' => [], 'videos' => [] } if json_str.nil?
+    return { "images" => [], "videos" => [] } if json_str.nil?
 
     JSON.parse(json_str)
   rescue => e
     Rails.logger.error "Visual filtering failed: #{e.message}"
-    { 'images' => [], 'videos' => [] }
+    { "images" => [], "videos" => [] }
   end
 
   def extract_comparison_tables(articles)
@@ -412,28 +412,28 @@ class SerpResearchService
       begin
         # Re-fetch to get full HTML
         uri = URI(article[:url])
-        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https',
+        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https",
                                    open_timeout: 5, read_timeout: 10) do |http|
           request = Net::HTTP::Get.new(uri)
           request["User-Agent"] = USER_AGENT
           http.request(request)
         end
 
-        next unless response.code == '200'
+        next unless response.code == "200"
 
         doc = Nokogiri::HTML(response.body)
 
         # Find HTML tables
-        doc.css('table').each do |table|
-          headers = table.css('th').map(&:text).map(&:strip)
-          rows = table.css('tr').map { |tr| tr.css('td').map(&:text).map(&:strip) }.reject(&:empty?)
+        doc.css("table").each do |table|
+          headers = table.css("th").map(&:text).map(&:strip)
+          rows = table.css("tr").map { |tr| tr.css("td").map(&:text).map(&:strip) }.reject(&:empty?)
 
           next if headers.empty? || rows.size < 2
 
           all_tables << {
             headers: headers,
             rows: rows,
-            context: table.previous_element&.text || ''
+            context: table.previous_element&.text || ""
           }
         end
       rescue => e
@@ -443,13 +443,13 @@ class SerpResearchService
 
     Rails.logger.info "Found #{all_tables.size} tables"
 
-    return { 'tables' => [] } if all_tables.empty?
+    return { "tables" => [] } if all_tables.empty?
 
     # AI structures the tables
     structure_tables(all_tables)
   rescue => e
     Rails.logger.error "Table extraction failed: #{e.message}"
-    { 'tables' => [] }
+    { "tables" => [] }
   end
 
   def structure_tables(raw_tables)
@@ -488,20 +488,20 @@ class SerpResearchService
 
     client = Ai::ClientService.for_serp_analysis
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 3000,
       temperature: 0.7
     )
 
-    return { 'tables' => [] } unless response[:success]
+    return { "tables" => [] } unless response[:success]
 
     json_str = extract_json(response[:content])
-    return { 'tables' => [] } if json_str.nil?
+    return { "tables" => [] } if json_str.nil?
 
     JSON.parse(json_str)
   rescue => e
     Rails.logger.error "Table structuring failed: #{e.message}"
-    { 'tables' => [] }
+    { "tables" => [] }
   end
 
   def extract_step_by_step_guides(articles)
@@ -513,24 +513,24 @@ class SerpResearchService
       begin
         # Re-fetch to get full HTML with list structure
         uri = URI(article[:url])
-        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https',
+        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https",
                                    open_timeout: 5, read_timeout: 10) do |http|
           request = Net::HTTP::Get.new(uri)
           request["User-Agent"] = USER_AGENT
           http.request(request)
         end
 
-        next unless response.code == '200'
+        next unless response.code == "200"
 
         doc = Nokogiri::HTML(response.body)
 
         # Find ordered/unordered lists with 3+ items
-        (doc.css('ol') + doc.css('ul')).each do |list|
-          items = list.css('li').map(&:text).map(&:strip)
+        (doc.css("ol") + doc.css("ul")).each do |list|
+          items = list.css("li").map(&:text).map(&:strip)
           next if items.size < 3
 
           all_guides << {
-            heading: list.previous_element&.text || '',
+            heading: list.previous_element&.text || "",
             steps: items,
             context: list.parent.text[0..200]
           }
@@ -542,13 +542,13 @@ class SerpResearchService
 
     Rails.logger.info "Found #{all_guides.size} potential guides"
 
-    return { 'guides' => [] } if all_guides.empty?
+    return { "guides" => [] } if all_guides.empty?
 
     # AI filters for actionable guides
     extract_actionable_guides(all_guides)
   rescue => e
     Rails.logger.error "Guide extraction failed: #{e.message}"
-    { 'guides' => [] }
+    { "guides" => [] }
   end
 
   def extract_actionable_guides(raw_guides)
@@ -594,20 +594,20 @@ class SerpResearchService
 
     client = Ai::ClientService.for_serp_analysis
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 4000,
       temperature: 0.7
     )
 
-    return { 'guides' => [] } unless response[:success]
+    return { "guides" => [] } unless response[:success]
 
     json_str = extract_json(response[:content])
-    return { 'guides' => [] } if json_str.nil?
+    return { "guides" => [] } if json_str.nil?
 
     JSON.parse(json_str)
   rescue => e
     Rails.logger.error "Guide filtering failed: #{e.message}"
-    { 'guides' => [] }
+    { "guides" => [] }
   end
 
   def extract_downloadable_resources(articles)
@@ -619,32 +619,32 @@ class SerpResearchService
       begin
         # Re-fetch to get full HTML with links
         uri = URI(article[:url])
-        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https',
+        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https",
                                    open_timeout: 5, read_timeout: 10) do |http|
           request = Net::HTTP::Get.new(uri)
           request["User-Agent"] = USER_AGENT
           http.request(request)
         end
 
-        next unless response.code == '200'
+        next unless response.code == "200"
 
         doc = Nokogiri::HTML(response.body)
 
         # Find links to templates, tools, calculators
-        doc.css('a[href]').each do |link|
+        doc.css("a[href]").each do |link|
           text = link.text.downcase
-          href = link['href'] || ''
+          href = link["href"] || ""
 
           # Match template/tool keywords
-          is_resource = text.include?('template') || text.include?('download') ||
-                       text.include?('free') || text.include?('calculator') ||
-                       href.include?('template') || href.include?('.pdf') ||
-                       href.include?('notion.so') || href.include?('docs.google.com') ||
-                       href.include?('airtable.com') || href.include?('sheets')
+          is_resource = text.include?("template") || text.include?("download") ||
+                       text.include?("free") || text.include?("calculator") ||
+                       href.include?("template") || href.include?(".pdf") ||
+                       href.include?("notion.so") || href.include?("docs.google.com") ||
+                       href.include?("airtable.com") || href.include?("sheets")
 
           next unless is_resource
 
-          resource_url = href.start_with?('http') ? href : URI.join(article[:url], href).to_s rescue nil
+          resource_url = href.start_with?("http") ? href : URI.join(article[:url], href).to_s rescue nil
           next if resource_url.nil?
 
           all_resources << {
@@ -663,21 +663,21 @@ class SerpResearchService
 
     Rails.logger.info "Found #{all_resources.size} potential resources"
 
-    return { 'resources' => [] } if all_resources.empty?
+    return { "resources" => [] } if all_resources.empty?
 
     # AI filters for legitimate resources
     filter_legitimate_resources(all_resources)
   rescue => e
     Rails.logger.error "Resource extraction failed: #{e.message}"
-    { 'resources' => [] }
+    { "resources" => [] }
   end
 
   def detect_resource_type(url)
-    return 'pdf' if url.include?('.pdf')
-    return 'notion' if url.include?('notion.so')
-    return 'spreadsheet' if url.include?('docs.google.com') || url.include?('sheets') || url.include?('airtable.com')
-    return 'tool' if url.include?('ahrefs') || url.include?('semrush') || url.include?('moz')
-    'other'
+    return "pdf" if url.include?(".pdf")
+    return "notion" if url.include?("notion.so")
+    return "spreadsheet" if url.include?("docs.google.com") || url.include?("sheets") || url.include?("airtable.com")
+    return "tool" if url.include?("ahrefs") || url.include?("semrush") || url.include?("moz")
+    "other"
   end
 
   def filter_legitimate_resources(raw_resources)
@@ -721,20 +721,20 @@ class SerpResearchService
 
     client = Ai::ClientService.for_serp_analysis
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 2000,
       temperature: 0.7
     )
 
-    return { 'resources' => [] } unless response[:success]
+    return { "resources" => [] } unless response[:success]
 
     json_str = extract_json(response[:content])
-    return { 'resources' => [] } if json_str.nil?
+    return { "resources" => [] } if json_str.nil?
 
     JSON.parse(json_str)
   rescue => e
     Rails.logger.error "Resource filtering failed: #{e.message}"
-    { 'resources' => [] }
+    { "resources" => [] }
   end
 
   def extract_json(response)

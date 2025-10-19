@@ -6,13 +6,13 @@ Rails.application.routes.draw do
 
   # Projects and Articles
   resources :projects do
-    resources :articles, only: [:create]
+    resources :articles, only: [ :create ]
     collection do
       post :autofill
     end
   end
 
-  resources :articles, only: [:show, :destroy] do
+  resources :articles, only: [ :show, :destroy ] do
     member do
       get :export
       post :retry

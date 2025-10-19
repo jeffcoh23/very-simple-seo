@@ -7,13 +7,13 @@ class SemanticSimilarityService
   MAX_BATCH_SIZE = 2000 # OpenAI limit is 2048, leave buffer
 
   def initialize
-    @api_key = ENV['OPENAI_API_KEY']
+    @api_key = ENV["OPENAI_API_KEY"]
     raise "OPENAI_API_KEY environment variable not set" if @api_key.nil? || @api_key.empty?
   end
 
   # Calculate similarity between two texts
   def similarity(text1, text2)
-    embeddings = get_embeddings([text1, text2])
+    embeddings = get_embeddings([ text1, text2 ])
     cosine_similarity(embeddings[0], embeddings[1])
   end
 
@@ -26,7 +26,7 @@ class SemanticSimilarityService
     # So we need to batch if we have more than 2047 keywords (+ 1 for base_text)
     if keywords.size <= MAX_BATCH_SIZE
       # Small enough to do in one request
-      all_texts = [base_text] + keywords
+      all_texts = [ base_text ] + keywords
       embeddings = get_embeddings(all_texts)
       base_embedding = embeddings[0]
 
@@ -41,7 +41,7 @@ class SemanticSimilarityService
       Rails.logger.info "Batching #{keywords.size} keywords into chunks of #{MAX_BATCH_SIZE}"
 
       # Get base embedding once
-      base_embedding = get_embeddings([base_text])[0]
+      base_embedding = get_embeddings([ base_text ])[0]
 
       # Process keywords in batches
       results = []
@@ -62,7 +62,7 @@ class SemanticSimilarityService
 
   # Embed a single text (returns vector array)
   def embed(text)
-    get_embeddings([text])[0]
+    get_embeddings([ text ])[0]
   end
 
   # Embed multiple texts (returns array of vectors)
@@ -74,8 +74,8 @@ class SemanticSimilarityService
 
   # Call OpenAI embeddings API using HTTP
   def get_embeddings(texts)
-    require 'net/http'
-    require 'json'
+    require "net/http"
+    require "json"
 
     # Clean texts (remove empty, truncate very long)
     cleaned_texts = texts.map do |text|
@@ -90,8 +90,8 @@ class SemanticSimilarityService
     http.read_timeout = 30
 
     request = Net::HTTP::Post.new(uri.path, {
-      'Content-Type' => 'application/json',
-      'Authorization' => "Bearer #{@api_key}"
+      "Content-Type" => "application/json",
+      "Authorization" => "Bearer #{@api_key}"
     })
 
     request.body = {

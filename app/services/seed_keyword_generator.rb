@@ -154,7 +154,7 @@ class SeedKeywordGenerator
     PROMPT
 
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       system_prompt: "You are an expert SEO strategist who generates keyword ideas based on actual website content.",
       max_tokens: 2000,
       temperature: 0.7
@@ -243,8 +243,8 @@ class SeedKeywordGenerator
   def parse_keywords(content)
     keywords = content.split("\n")
                      .map { |line| line.strip }
-                     .map { |line| line.gsub(/^\d+[\.\)]\s*/, '') }
-                     .map { |line| line.gsub(/^[-*•]\s*/, '') }
+                     .map { |line| line.gsub(/^\d+[\.\)]\s*/, "") }
+                     .map { |line| line.gsub(/^[-*•]\s*/, "") }
                      .select { |line| line.length > 0 && line.length < 100 }
                      .map(&:downcase)
 
@@ -300,8 +300,8 @@ class SeedKeywordGenerator
   def extract_domain_name_from_url(url)
     # Extract domain name from URL (e.g., "signallab" from "https://signallab.app")
     uri = URI.parse(url)
-    host = uri.host.gsub(/^www\./, '')
-    host.split('.').first
+    host = uri.host.gsub(/^www\./, "")
+    host.split(".").first
   rescue
     "tool"
   end

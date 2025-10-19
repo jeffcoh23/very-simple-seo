@@ -40,28 +40,28 @@ class KeywordTest < ActiveSupport::TestCase
     k3 = @research.keywords.create!(keyword: "medium", volume: 100, difficulty: 50, opportunity: 70)
 
     ordered = @research.keywords.by_opportunity
-    assert_equal [k2, k3, k1], ordered.to_a
+    assert_equal [ k2, k3, k1 ], ordered.to_a
   end
 
   test "recommended scope returns keywords with opportunity >= 70" do
     k1 = @research.keywords.create!(keyword: "low", volume: 100, difficulty: 50, opportunity: 50)
     k2 = @research.keywords.create!(keyword: "high", volume: 100, difficulty: 50, opportunity: 75)
 
-    assert_equal [k2], @research.keywords.recommended.to_a
+    assert_equal [ k2 ], @research.keywords.recommended.to_a
   end
 
   test "starred scope returns only starred keywords" do
     k1 = @research.keywords.create!(keyword: "starred", volume: 100, difficulty: 50, opportunity: 75, starred: true)
     k2 = @research.keywords.create!(keyword: "not starred", volume: 100, difficulty: 50, opportunity: 75, starred: false)
 
-    assert_equal [k1], @research.keywords.starred.to_a
+    assert_equal [ k1 ], @research.keywords.starred.to_a
   end
 
   test "published scope returns only published keywords" do
     k1 = @research.keywords.create!(keyword: "published", volume: 100, difficulty: 50, opportunity: 75, published: true)
     k2 = @research.keywords.create!(keyword: "not published", volume: 100, difficulty: 50, opportunity: 75, published: false)
 
-    assert_equal [k1], @research.keywords.published.to_a
+    assert_equal [ k1 ], @research.keywords.published.to_a
   end
 
   # Helper methods

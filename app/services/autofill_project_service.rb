@@ -91,7 +91,7 @@ class AutofillProjectService
         Quality over quantity - better to return 5 real competitors than 15 questionable ones.
       QUERY
 
-      json_structure = [{domain: "competitor.com", title: "Name", description: "What they do"}].to_json
+      json_structure = [ { domain: "competitor.com", title: "Name", description: "What they do" } ].to_json
       result = grounding.search_json(query, json_structure_hint: json_structure)
 
       return [] unless result[:success]
@@ -127,7 +127,7 @@ class AutofillProjectService
         domain: domain,
         title: c["title"] || c["name"] || extract_site_name(domain),
         description: c["description"] || c["what_they_do"] || "",
-        source: 'auto_detected'
+        source: "auto_detected"
       }
     end.compact
   end
@@ -138,13 +138,13 @@ class AutofillProjectService
 
     # Clean up domain
     domain = domain.to_s.strip
-                 .gsub(%r{^https?://}, '')
-                 .gsub(%r{^www\.}, '')
-                 .gsub(%r{/$}, '')
-                 .split('/').first
+                 .gsub(%r{^https?://}, "")
+                 .gsub(%r{^www\.}, "")
+                 .gsub(%r{/$}, "")
+                 .split("/").first
                  .downcase
 
-    return nil if domain.empty? || !domain.include?('.')
+    return nil if domain.empty? || !domain.include?(".")
 
     # Add https:// prefix for consistency
     "https://#{domain}"
@@ -153,8 +153,8 @@ class AutofillProjectService
   def extract_site_name(domain)
     # Extract name from domain (e.g., "bizway" from "https://bizway.io")
     uri = URI.parse(domain)
-    host = uri.host.gsub(/^www\./, '')
-    host.split('.').first.capitalize
+    host = uri.host.gsub(/^www\./, "")
+    host.split(".").first.capitalize
   rescue
     "Competitor"
   end

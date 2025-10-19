@@ -25,7 +25,7 @@ class RedditMinerService
       data = JSON.parse(response.body)
 
       # Extract post titles
-      titles = data.dig('data', 'children')&.map { |post| post.dig('data', 'title') } || []
+      titles = data.dig("data", "children")&.map { |post| post.dig("data", "title") } || []
 
       # Extract keywords from titles (questions and phrases)
       keywords = titles.flat_map do |title|
@@ -51,23 +51,23 @@ class RedditMinerService
     text = text.downcase
 
     # Extract question-based keywords
-    if text.include?('how to')
+    if text.include?("how to")
       keywords << text[/how to [^?.!]+/]
     end
 
-    if text.include?('what is')
+    if text.include?("what is")
       keywords << text[/what is [^?.!]+/]
     end
 
-    if text.include?('best way')
+    if text.include?("best way")
       keywords << text[/best way [^?.!]+/]
     end
 
-    if text.include?('how do i')
+    if text.include?("how do i")
       keywords << text[/how do i [^?.!]+/]
     end
 
-    if text.include?('should i')
+    if text.include?("should i")
       keywords << text[/should i [^?.!]+/]
     end
 

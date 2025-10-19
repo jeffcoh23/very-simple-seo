@@ -11,9 +11,9 @@ class InternalLinkSuggester
   # Returns hash with existing articles, CTAs, and linking guidelines
   def build_internal_linking_context
     {
-      'existing_articles' => gather_existing_articles,
-      'ctas' => gather_ctas,
-      'linking_guidelines' => build_linking_guidelines
+      "existing_articles" => gather_existing_articles,
+      "ctas" => gather_ctas,
+      "linking_guidelines" => build_linking_guidelines
     }
   end
 
@@ -21,19 +21,19 @@ class InternalLinkSuggester
 
   def gather_existing_articles
     # NEW: Use scraped sitemap data if available (REAL URLs from live site)
-    if @project.internal_content_index.present? && @project.internal_content_index['pages'].present?
-      scraped_pages = @project.internal_content_index['pages'] || []
+    if @project.internal_content_index.present? && @project.internal_content_index["pages"].present?
+      scraped_pages = @project.internal_content_index["pages"] || []
 
       if scraped_pages.any?
         Rails.logger.info "Using #{scraped_pages.size} scraped pages for internal links"
         return scraped_pages.map do |page|
           {
-            'title' => page['title'],
-            'keyword' => extract_keyword_from_url(page['url']),
-            'url' => page['url'],  # REAL URL like /blog/validate-ideas
-            'meta_description' => page['meta_description'],
-            'word_count' => estimate_word_count(page['summary']),
-            'topics' => page['headings'] || []
+            "title" => page["title"],
+            "keyword" => extract_keyword_from_url(page["url"]),
+            "url" => page["url"],  # REAL URL like /blog/validate-ideas
+            "meta_description" => page["meta_description"],
+            "word_count" => estimate_word_count(page["summary"]),
+            "topics" => page["headings"] || []
           }
         end
       end
@@ -48,12 +48,12 @@ class InternalLinkSuggester
 
     articles.map do |article|
       {
-        'title' => article.title,
-        'keyword' => article.keyword&.keyword,
-        'url' => article_url(article),
-        'meta_description' => article.meta_description,
-        'word_count' => article.word_count,
-        'topics' => extract_topics_from_article(article)
+        "title" => article.title,
+        "keyword" => article.keyword&.keyword,
+        "url" => article_url(article),
+        "meta_description" => article.meta_description,
+        "word_count" => article.word_count,
+        "topics" => extract_topics_from_article(article)
       }
     end
   end
@@ -64,9 +64,9 @@ class InternalLinkSuggester
 
     @project.call_to_actions.map do |cta|
       {
-        'text' => cta['text'],
-        'url' => cta['url'],
-        'context' => infer_cta_context(cta)
+        "text" => cta["text"],
+        "url" => cta["url"],
+        "context" => infer_cta_context(cta)
       }
     end
   end
@@ -89,29 +89,29 @@ class InternalLinkSuggester
     # Simple approach: extract H2 headings from outline
     return [] unless article.outline.present?
 
-    sections = article.outline['sections'] || []
-    sections.map { |s| s['heading'] }.compact
+    sections = article.outline["sections"] || []
+    sections.map { |s| s["heading"] }.compact
   end
 
   def infer_cta_context(cta)
     # Infer what the CTA is for based on text/URL
-    text = cta['text'].to_s.downcase
-    url = cta['url'].to_s.downcase
+    text = cta["text"].to_s.downcase
+    url = cta["url"].to_s.downcase
 
-    if text.include?('sign up') || text.include?('signup') || url.include?('signup')
-      'user_registration'
-    elsif text.include?('demo') || url.include?('demo')
-      'product_demo'
-    elsif text.include?('pricing') || url.include?('pricing')
-      'pricing_page'
-    elsif text.include?('download') || text.include?('get') && text.include?('free')
-      'free_resource'
-    elsif text.include?('contact') || url.include?('contact')
-      'contact_sales'
-    elsif text.include?('trial') || text.include?('free') || url.include?('trial')
-      'free_trial'
+    if text.include?("sign up") || text.include?("signup") || url.include?("signup")
+      "user_registration"
+    elsif text.include?("demo") || url.include?("demo")
+      "product_demo"
+    elsif text.include?("pricing") || url.include?("pricing")
+      "pricing_page"
+    elsif text.include?("download") || text.include?("get") && text.include?("free")
+      "free_resource"
+    elsif text.include?("contact") || url.include?("contact")
+      "contact_sales"
+    elsif text.include?("trial") || text.include?("free") || url.include?("trial")
+      "free_trial"
     else
-      'general_cta'
+      "general_cta"
     end
   end
 
@@ -126,8 +126,8 @@ class InternalLinkSuggester
   def extract_keyword_from_url(url)
     # Extract keyword from URL slug
     # e.g., "/blog/validate-business-ideas" → "validate business ideas"
-    slug = url.split('/').last
-    slug&.gsub('-', ' ')&.gsub('_', ' ') || ''
+    slug = url.split("/").last
+    slug&.gsub("-", " ")&.gsub("_", " ") || ""
   end
 
   def estimate_word_count(summary)

@@ -71,8 +71,8 @@ class ArticleGenerationService
       word_count = improvement_result[:data].split.size
 
       # Extract title and meta from outline
-      title = outline_result[:data]['title']
-      meta_description = outline_result[:data]['meta_description']
+      title = outline_result[:data]["title"]
+      meta_description = outline_result[:data]["meta_description"]
 
       @article.update!(
         title: title,

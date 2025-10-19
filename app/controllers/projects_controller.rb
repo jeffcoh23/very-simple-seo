@@ -1,6 +1,6 @@
 # app/controllers/projects_controller.rb
 class ProjectsController < ApplicationController
-  before_action :set_project, only: [:show, :edit, :update, :destroy]
+  before_action :set_project, only: [ :show, :edit, :update, :destroy ]
 
   # GET /projects
   def index
@@ -110,8 +110,8 @@ class ProjectsController < ApplicationController
       :sitemap_url,
       :description,
       seed_keywords: [],
-      call_to_actions: [:text, :url],
-      competitors: [:domain, :title, :description, :source]
+      call_to_actions: [ :text, :url ],
+      competitors: [ :domain, :title, :description, :source ]
     )
   end
 
@@ -133,7 +133,7 @@ class ProjectsController < ApplicationController
       domain = competitor_data[:domain]
       title = competitor_data[:title]
       description = competitor_data[:description]
-      source = competitor_data[:source] || 'manual'
+      source = competitor_data[:source] || "manual"
 
       # Find existing or create new
       competitor = @project.competitors.find_or_initialize_by(domain: domain)

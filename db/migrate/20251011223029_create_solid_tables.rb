@@ -12,8 +12,8 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.integer :key_hash, limit: 8, null: false
       t.integer :byte_size, limit: 4, null: false
 
-      t.index [:key_hash, :byte_size], name: "index_solid_cache_entries_on_key_hash_and_byte_size"
-      t.index [:key_hash], name: "index_solid_cache_entries_on_key_hash", unique: true
+      t.index [ :key_hash, :byte_size ], name: "index_solid_cache_entries_on_key_hash_and_byte_size"
+      t.index [ :key_hash ], name: "index_solid_cache_entries_on_key_hash", unique: true
     end
 
     # ============================================================================
@@ -25,9 +25,9 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.datetime :created_at, null: false
       t.integer :channel_hash, limit: 8, null: false
 
-      t.index [:channel], name: "index_solid_cable_messages_on_channel"
-      t.index [:created_at], name: "index_solid_cable_messages_on_created_at"
-      t.index [:channel_hash], name: "index_solid_cable_messages_on_channel_hash"
+      t.index [ :channel ], name: "index_solid_cable_messages_on_channel"
+      t.index [ :created_at ], name: "index_solid_cable_messages_on_created_at"
+      t.index [ :channel_hash ], name: "index_solid_cable_messages_on_channel_hash"
     end
 
     # ============================================================================
@@ -46,11 +46,11 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.string :concurrency_key, limit: 200
       t.timestamps
 
-      t.index [:active_job_id], name: "index_solid_queue_jobs_on_active_job_id"
-      t.index [:class_name], name: "index_solid_queue_jobs_on_class_name"
-      t.index [:finished_at], name: "index_solid_queue_jobs_on_finished_at"
-      t.index [:queue_name, :finished_at], name: "index_solid_queue_jobs_for_filtering"
-      t.index [:scheduled_at, :finished_at], name: "index_solid_queue_jobs_for_alerting"
+      t.index [ :active_job_id ], name: "index_solid_queue_jobs_on_active_job_id"
+      t.index [ :class_name ], name: "index_solid_queue_jobs_on_class_name"
+      t.index [ :finished_at ], name: "index_solid_queue_jobs_on_finished_at"
+      t.index [ :queue_name, :finished_at ], name: "index_solid_queue_jobs_for_filtering"
+      t.index [ :scheduled_at, :finished_at ], name: "index_solid_queue_jobs_for_alerting"
     end
 
     # Scheduled executions
@@ -61,7 +61,7 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.datetime :scheduled_at, null: false
       t.timestamps
 
-      t.index [:scheduled_at, :priority, :job_id], name: "index_solid_queue_dispatch_all"
+      t.index [ :scheduled_at, :priority, :job_id ], name: "index_solid_queue_dispatch_all"
     end
 
     # Ready executions
@@ -71,8 +71,8 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.integer :priority, default: 0, null: false
       t.timestamps
 
-      t.index [:priority, :job_id], name: "index_solid_queue_poll_all"
-      t.index [:queue_name, :priority, :job_id], name: "index_solid_queue_poll_by_queue"
+      t.index [ :priority, :job_id ], name: "index_solid_queue_poll_all"
+      t.index [ :queue_name, :priority, :job_id ], name: "index_solid_queue_poll_by_queue"
     end
 
     # Claimed executions
@@ -81,7 +81,7 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.bigint :process_id
       t.timestamps
 
-      t.index [:process_id, :job_id], name: "index_solid_queue_claimed_executions"
+      t.index [ :process_id, :job_id ], name: "index_solid_queue_claimed_executions"
     end
 
     # Failed executions
@@ -101,8 +101,8 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.datetime :expires_at, null: false
       t.timestamps
 
-      t.index [:concurrency_key, :priority, :job_id], name: "index_solid_queue_blocked_executions"
-      t.index [:expires_at], name: "index_solid_queue_blocked_executions_on_expires_at"
+      t.index [ :concurrency_key, :priority, :job_id ], name: "index_solid_queue_blocked_executions"
+      t.index [ :expires_at ], name: "index_solid_queue_blocked_executions_on_expires_at"
     end
 
     # Processes
@@ -115,8 +115,8 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.text :metadata
       t.timestamps
 
-      t.index [:last_heartbeat_at], name: "index_solid_queue_processes_on_last_heartbeat_at"
-      t.index [:supervisor_id], name: "index_solid_queue_processes_on_supervisor_id"
+      t.index [ :last_heartbeat_at ], name: "index_solid_queue_processes_on_last_heartbeat_at"
+      t.index [ :supervisor_id ], name: "index_solid_queue_processes_on_supervisor_id"
     end
 
     # Pauses
@@ -124,7 +124,7 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.string :queue_name, null: false
       t.timestamps
 
-      t.index [:queue_name], name: "index_solid_queue_pauses_on_queue_name", unique: true
+      t.index [ :queue_name ], name: "index_solid_queue_pauses_on_queue_name", unique: true
     end
 
     # Recurring executions
@@ -134,7 +134,7 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.datetime :run_at, null: false
       t.timestamps
 
-      t.index [:task_key, :run_at], name: "index_solid_queue_recurring_executions", unique: true
+      t.index [ :task_key, :run_at ], name: "index_solid_queue_recurring_executions", unique: true
     end
 
     # Recurring tasks
@@ -150,8 +150,8 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.text :description
       t.timestamps
 
-      t.index [:key], name: "index_solid_queue_recurring_tasks_on_key", unique: true
-      t.index [:static], name: "index_solid_queue_recurring_tasks_on_static"
+      t.index [ :key ], name: "index_solid_queue_recurring_tasks_on_key", unique: true
+      t.index [ :static ], name: "index_solid_queue_recurring_tasks_on_static"
     end
 
     # Semaphores
@@ -161,9 +161,9 @@ class CreateSolidTables < ActiveRecord::Migration[8.0]
       t.datetime :expires_at, null: false
       t.timestamps
 
-      t.index [:expires_at], name: "index_solid_queue_semaphores_on_expires_at"
-      t.index [:key, :value], name: "index_solid_queue_semaphores_on_key_and_value"
-      t.index [:key], name: "index_solid_queue_semaphores_on_key", unique: true
+      t.index [ :expires_at ], name: "index_solid_queue_semaphores_on_expires_at"
+      t.index [ :key, :value ], name: "index_solid_queue_semaphores_on_key_and_value"
+      t.index [ :key ], name: "index_solid_queue_semaphores_on_key", unique: true
     end
   end
 end

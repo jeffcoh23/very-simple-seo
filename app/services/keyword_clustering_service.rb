@@ -36,7 +36,7 @@ class KeywordClusteringService
     return [] if keywords.empty?
 
     # Start with each keyword in its own cluster
-    clusters = keywords.map { |kw| [kw] }
+    clusters = keywords.map { |kw| [ kw ] }
 
     # Get embeddings for all keywords at once (efficient batch processing)
     embeddings_map = {}
@@ -117,7 +117,7 @@ class KeywordClusteringService
       # Add cluster metadata
       best_data = @keywords_with_data[best_keyword].dup
       best_data[:cluster_size] = cluster.size
-      best_data[:cluster_keywords] = cluster - [best_keyword] # Other keywords in cluster
+      best_data[:cluster_keywords] = cluster - [ best_keyword ] # Other keywords in cluster
 
       best_keywords[best_keyword] = best_data
 

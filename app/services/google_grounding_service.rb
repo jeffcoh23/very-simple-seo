@@ -47,13 +47,13 @@ class GoogleGroundingService
       response = case @provider
       when :gemini_grounding
         @client.chat_with_grounding(
-          messages: [{ role: "user", content: prompt }],
+          messages: [ { role: "user", content: prompt } ],
           max_tokens: 8000,
           temperature: 0.3
         )
       else
         @client.chat(
-          messages: [{ role: "user", content: prompt }],
+          messages: [ { role: "user", content: prompt } ],
           max_tokens: 8000,
           temperature: 0.3
         )
@@ -172,7 +172,7 @@ class GoogleGroundingService
   # Gemini with google_search tool
   def search_with_gemini(query, max_tokens)
     response = @client.chat_with_grounding(
-      messages: [{ role: "user", content: query }],
+      messages: [ { role: "user", content: query } ],
       max_tokens: max_tokens,
       temperature: 0.3 # Lower for factual searches
     )
@@ -193,7 +193,7 @@ class GoogleGroundingService
   # Perplexity (has built-in web search)
   def search_with_perplexity(query, max_tokens)
     response = @client.chat(
-      messages: [{ role: "user", content: query }],
+      messages: [ { role: "user", content: query } ],
       max_tokens: max_tokens,
       temperature: 0.3
     )
@@ -215,7 +215,7 @@ class GoogleGroundingService
   def search_with_openai(query, max_tokens)
     # Future: OpenAI may add web search tools
     response = @client.chat(
-      messages: [{ role: "user", content: query }],
+      messages: [ { role: "user", content: query } ],
       max_tokens: max_tokens,
       temperature: 0.3
     )
@@ -283,7 +283,7 @@ class GoogleGroundingService
     {
       sources_count: citations.size,
       sources: citations,
-      web_search_queries: ["perplexity_automatic_search"],
+      web_search_queries: [ "perplexity_automatic_search" ],
       note: "Perplexity built-in search"
     }
   end

@@ -17,16 +17,16 @@ class ArticleWriterService
     return { data: nil, cost: 0.15 } if intro.nil?
 
     # Track all written content for context
-    @written_sections = [intro]
+    @written_sections = [ intro ]
     @used_examples = extract_used_examples(intro)
     @used_statistics = extract_used_statistics(intro)
     @mentioned_tools = extract_mentioned_tools(intro) # NEW: Track tools to prevent duplicates
 
     # Write each section
     sections = []
-    @outline['sections'].each_with_index do |section_outline, i|
-      next if section_outline['heading']&.downcase&.include?('introduction')
-      next if section_outline['heading']&.downcase&.include?('conclusion')
+    @outline["sections"].each_with_index do |section_outline, i|
+      next if section_outline["heading"]&.downcase&.include?("introduction")
+      next if section_outline["heading"]&.downcase&.include?("conclusion")
 
       Rails.logger.info "Writing section #{i + 1}/#{@outline['sections'].size}: #{section_outline['heading']}"
 
@@ -41,9 +41,9 @@ class ArticleWriterService
     end
 
     # Write FAQ section if included in outline
-    if @outline['has_faq_section'] && @outline['faq_section']
+    if @outline["has_faq_section"] && @outline["faq_section"]
       Rails.logger.info "Writing FAQ section"
-      faq_content = write_faq_section(@outline['faq_section'])
+      faq_content = write_faq_section(@outline["faq_section"])
       sections << faq_content if faq_content
     end
 
@@ -61,11 +61,11 @@ class ArticleWriterService
   private
 
   def write_introduction
-    examples = @serp_data['detailed_examples'] || []
-    statistics = @serp_data['statistics'] || []
+    examples = @serp_data["detailed_examples"] || []
+    statistics = @serp_data["statistics"] || []
 
-    intro_section = @outline['sections'].find { |s| s['heading']&.downcase&.include?('introduction') }
-    word_count = intro_section&.dig('word_count') || 250
+    intro_section = @outline["sections"].find { |s| s["heading"]&.downcase&.include?("introduction") }
+    word_count = intro_section&.dig("word_count") || 250
 
     prompt = <<~PROMPT
       Write an engaging introduction for an article about "#{@keyword}".
@@ -141,7 +141,7 @@ class ArticleWriterService
 
     client = Ai::ClientService.for_article_writing
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: (word_count * 2).to_i, # Tokens ≈ words * 1.3, give buffer
       temperature: 0.8
     )
@@ -155,23 +155,23 @@ class ArticleWriterService
   end
 
   def write_section(section_outline, section_index, previous_sections)
-    examples = @serp_data['detailed_examples'] || []
-    statistics = @serp_data['statistics'] || []
-    visual_elements = @serp_data.dig('visual_elements') || {}
-    comparison_tables = @serp_data.dig('comparison_tables', 'tables') || []
-    step_by_step_guides = @serp_data.dig('step_by_step_guides', 'guides') || []
-    downloadable_resources = @serp_data.dig('downloadable_resources', 'resources') || []
-    recommended_tools = @serp_data['recommended_tools'] || []
+    examples = @serp_data["detailed_examples"] || []
+    statistics = @serp_data["statistics"] || []
+    visual_elements = @serp_data.dig("visual_elements") || {}
+    comparison_tables = @serp_data.dig("comparison_tables", "tables") || []
+    step_by_step_guides = @serp_data.dig("step_by_step_guides", "guides") || []
+    downloadable_resources = @serp_data.dig("downloadable_resources", "resources") || []
+    recommended_tools = @serp_data["recommended_tools"] || []
 
-    heading = section_outline['heading']
-    word_count = section_outline['word_count'] || 400
-    key_points = section_outline['key_points'] || []
-    subsections = section_outline['subsections'] || []
+    heading = section_outline["heading"]
+    word_count = section_outline["word_count"] || 400
+    key_points = section_outline["key_points"] || []
+    subsections = section_outline["subsections"] || []
 
     # Get CTAs for this section
-    section_ctas = (@outline['cta_placements'] || []).select do |cta|
-      cta['placement']&.include?("section_#{section_index + 1}") ||
-      cta['placement']&.include?("after_section_#{section_index + 1}")
+    section_ctas = (@outline["cta_placements"] || []).select do |cta|
+      cta["placement"]&.include?("section_#{section_index + 1}") ||
+      cta["placement"]&.include?("after_section_#{section_index + 1}")
     end
 
     # Build previous context (last 2 sections for brevity)
@@ -292,7 +292,7 @@ class ArticleWriterService
 
     client = Ai::ClientService.for_article_writing
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: (word_count * 2).to_i,
       temperature: 0.8
     )
@@ -306,13 +306,13 @@ class ArticleWriterService
   end
 
   def write_conclusion(sections)
-    conclusion_section = @outline['sections'].find { |s| s['heading']&.downcase&.include?('conclusion') }
-    word_count = conclusion_section&.dig('word_count') || 200
+    conclusion_section = @outline["sections"].find { |s| s["heading"]&.downcase&.include?("conclusion") }
+    word_count = conclusion_section&.dig("word_count") || 200
 
     # Get section headings for context
-    section_headings = @outline['sections']
-      .reject { |s| s['heading']&.downcase&.include?('introduction') || s['heading']&.downcase&.include?('conclusion') }
-      .map { |s| s['heading'] }
+    section_headings = @outline["sections"]
+      .reject { |s| s["heading"]&.downcase&.include?("introduction") || s["heading"]&.downcase&.include?("conclusion") }
+      .map { |s| s["heading"] }
 
     prompt = <<~PROMPT
       Write a conclusion for an article about "#{@keyword}".
@@ -368,7 +368,7 @@ class ArticleWriterService
 
     client = Ai::ClientService.for_article_writing
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: (word_count * 2).to_i,
       temperature: 0.8
     )
@@ -382,16 +382,16 @@ class ArticleWriterService
   end
 
   def write_faq_section(faq_section_outline)
-    faqs = @serp_data['faqs'] || []
+    faqs = @serp_data["faqs"] || []
     return nil if faqs.empty?
 
-    heading = faq_section_outline['heading'] || "Frequently Asked Questions"
-    word_count = faq_section_outline['word_count'] || 600
-    questions_to_include = faq_section_outline['questions_to_include'] || []
+    heading = faq_section_outline["heading"] || "Frequently Asked Questions"
+    word_count = faq_section_outline["word_count"] || 600
+    questions_to_include = faq_section_outline["questions_to_include"] || []
 
     # Match FAQs from SERP data with questions_to_include
     selected_faqs = questions_to_include.map do |question_text|
-      faqs.find { |faq| faq['question']&.downcase&.include?(question_text.downcase) || question_text.downcase.include?(faq['question']&.downcase || '') }
+      faqs.find { |faq| faq["question"]&.downcase&.include?(question_text.downcase) || question_text.downcase.include?(faq["question"]&.downcase || "") }
     end.compact
 
     # If outline didn't specify questions, take first 8-12 from SERP data
@@ -399,7 +399,7 @@ class ArticleWriterService
 
     faqs_text = selected_faqs.map do |faq|
       text = "**Q: #{faq['question']}**\n\n#{faq['answer']}"
-      text += " ([Source](#{faq['source_url']}))" if faq['source_url'].present?
+      text += " ([Source](#{faq['source_url']}))" if faq["source_url"].present?
       text
     end.join("\n\n")
 
@@ -430,7 +430,7 @@ class ArticleWriterService
 
     client = Ai::ClientService.for_article_writing
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: (word_count * 2).to_i,
       temperature: 0.7
     )
@@ -507,7 +507,7 @@ class ArticleWriterService
   def conclusion_cta_instructions
     return "" unless @project
 
-    project_ctas = @outline&.dig('cta_placements') || []
+    project_ctas = @outline&.dig("cta_placements") || []
     final_cta = project_ctas.last
 
     if final_cta
@@ -549,11 +549,11 @@ class ArticleWriterService
   def extract_used_examples(text)
     return [] if text.nil? || text.empty?
 
-    examples = @serp_data['detailed_examples'] || []
+    examples = @serp_data["detailed_examples"] || []
     used = []
 
     examples.each do |ex|
-      company = ex['company']
+      company = ex["company"]
       next if company.nil? || company.empty? # Skip nil/empty company names
 
       # Check if company name appears in text (case-insensitive)
@@ -567,11 +567,11 @@ class ArticleWriterService
   def extract_used_statistics(text)
     return [] if text.nil? || text.empty?
 
-    statistics = @serp_data['statistics'] || []
+    statistics = @serp_data["statistics"] || []
     used = []
 
     statistics.each do |stat|
-      stat_text = stat['stat']
+      stat_text = stat["stat"]
       next if stat_text.nil? || stat_text.empty? # Skip nil/empty stats
 
       # Check if stat appears in text
@@ -586,7 +586,7 @@ class ArticleWriterService
     return [] if all_examples.nil?
 
     all_examples.reject do |ex|
-      @used_examples.include?(ex['company'])
+      @used_examples.include?(ex["company"])
     end
   end
 
@@ -595,14 +595,14 @@ class ArticleWriterService
     return [] if all_statistics.nil?
 
     all_statistics.reject do |stat|
-      @used_statistics.include?(stat['stat'])
+      @used_statistics.include?(stat["stat"])
     end
   end
 
   # Build prompt text for visual elements
   def build_visuals_prompt(visual_elements)
-    images = visual_elements['images'] || []
-    videos = visual_elements['videos'] || []
+    images = visual_elements["images"] || []
+    videos = visual_elements["videos"] || []
 
     return "" if images.empty? && videos.empty?
 
@@ -676,7 +676,7 @@ class ArticleWriterService
     guides.each_with_index do |guide, i|
       parts << "#{i + 1}. #{guide['title']}"
       parts << "   Steps: #{guide['steps'].size} actionable steps"
-      parts << "   Outcome: #{guide['outcome']}" if guide['outcome']
+      parts << "   Outcome: #{guide['outcome']}" if guide["outcome"]
     end
 
     parts << ""
@@ -724,7 +724,7 @@ class ArticleWriterService
     return "" if tools.empty?
 
     # Filter out already-mentioned tools
-    available_tools = tools.reject { |t| already_mentioned.include?(t['tool_name']) }
+    available_tools = tools.reject { |t| already_mentioned.include?(t["tool_name"]) }
 
     # Limit to 2 tools max per section
     limited_tools = available_tools.take(2)
@@ -771,7 +771,7 @@ class ArticleWriterService
     scraped_pages.take(5).each_with_index do |page, i|
       parts << "#{i + 1}. #{page['title']}"
       parts << "   URL: #{page['url']}"
-      parts << "   Description: #{page['meta_description'][0..100]}..." if page['meta_description'].present?
+      parts << "   Description: #{page['meta_description'][0..100]}..." if page["meta_description"].present?
     end
 
     parts << ""
@@ -790,7 +790,7 @@ class ArticleWriterService
   def get_scraped_pages
     return [] unless @project&.internal_content_index.present?
 
-    pages = @project.internal_content_index['pages'] || []
+    pages = @project.internal_content_index["pages"] || []
     return [] if pages.empty?
 
     # Return scraped pages (already includes title, url, meta_description)
@@ -826,12 +826,12 @@ class ArticleWriterService
 
   # Generate Table of Contents from outline sections
   def generate_table_of_contents
-    sections = @outline['sections'] || []
+    sections = @outline["sections"] || []
 
     # Only generate TOC if we have 3+ sections (excluding intro/conclusion)
     content_sections = sections.reject do |s|
-      heading = s['heading']&.downcase || ''
-      heading.include?('introduction') || heading.include?('conclusion')
+      heading = s["heading"]&.downcase || ""
+      heading.include?("introduction") || heading.include?("conclusion")
     end
 
     return "" if content_sections.size < 3
@@ -840,19 +840,19 @@ class ArticleWriterService
     toc_parts << "## Table of Contents\n"
 
     content_sections.each_with_index do |section, i|
-      heading = section['heading']
+      heading = section["heading"]
       # Create anchor (lowercase, hyphens, no special chars)
       anchor = heading.downcase
-                      .gsub(/[^a-z0-9\s-]/, '')
-                      .gsub(/\s+/, '-')
-                      .gsub(/-+/, '-')
-                      .gsub(/^-|-$/, '')
+                      .gsub(/[^a-z0-9\s-]/, "")
+                      .gsub(/\s+/, "-")
+                      .gsub(/-+/, "-")
+                      .gsub(/^-|-$/, "")
 
       toc_parts << "#{i + 1}. [#{heading}](##{anchor})"
     end
 
     # Add FAQ if present
-    if @outline['has_faq_section']
+    if @outline["has_faq_section"]
       toc_parts << "#{content_sections.size + 1}. [Frequently Asked Questions](#frequently-asked-questions)"
     end
 
@@ -866,30 +866,30 @@ class ArticleWriterService
     citation_counter = 0
 
     # Collect sources from statistics
-    if @serp_data['statistics'].is_a?(Array)
-      @serp_data['statistics'].each do |stat|
-        if stat['source_url'].present? && stat['source'].present?
+    if @serp_data["statistics"].is_a?(Array)
+      @serp_data["statistics"].each do |stat|
+        if stat["source_url"].present? && stat["source"].present?
           citation_counter += 1
           sources << {
             number: citation_counter,
-            title: stat['source'],
-            url: stat['source_url']
+            title: stat["source"],
+            url: stat["source_url"]
           }
         end
       end
     end
 
     # Collect sources from examples
-    if @serp_data['detailed_examples'].is_a?(Array)
-      @serp_data['detailed_examples'].each do |example|
-        if example['source_url'].present?
+    if @serp_data["detailed_examples"].is_a?(Array)
+      @serp_data["detailed_examples"].each do |example|
+        if example["source_url"].present?
           # Avoid duplicates
-          unless sources.any? { |s| s[:url] == example['source_url'] }
+          unless sources.any? { |s| s[:url] == example["source_url"] }
             citation_counter += 1
             sources << {
               number: citation_counter,
-              title: example['company'] || example['source'] || 'Source',
-              url: example['source_url']
+              title: example["company"] || example["source"] || "Source",
+              url: example["source_url"]
             }
           end
         end
@@ -915,10 +915,10 @@ class ArticleWriterService
 
     # List of common tools to track
     known_tools = [
-      'Typeform', 'Google Forms', 'SurveyMonkey', 'Optimizely',
-      'Mixpanel', 'Google Analytics', 'Unbounce', 'Hotjar',
-      'Mailchimp', 'ConvertKit', 'HubSpot', 'Intercom',
-      'Calendly', 'Zoom', 'Loom', 'Figma', 'Canva'
+      "Typeform", "Google Forms", "SurveyMonkey", "Optimizely",
+      "Mixpanel", "Google Analytics", "Unbounce", "Hotjar",
+      "Mailchimp", "ConvertKit", "HubSpot", "Intercom",
+      "Calendly", "Zoom", "Loom", "Figma", "Canva"
     ]
 
     mentioned = []

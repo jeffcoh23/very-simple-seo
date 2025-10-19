@@ -1,37 +1,37 @@
 source "https://rubygems.org"
 # Frontend / SPA bridge
-gem 'vite_rails'
-gem 'inertia_rails'
+gem "vite_rails"
+gem "inertia_rails"
 
 # Billing
-gem 'pay'
-gem 'stripe', '~> 15' # Pay requires stripe ~> 15
+gem "pay"
+gem "stripe", "~> 15" # Pay requires stripe ~> 15
 
 # SEO
-gem 'sitemap_generator'
+gem "sitemap_generator"
 
 # Social login
-gem 'omniauth'
-gem 'omniauth-rails_csrf_protection'
-gem 'omniauth-google-oauth2'
+gem "omniauth"
+gem "omniauth-rails_csrf_protection"
+gem "omniauth-google-oauth2"
 
-gem 'ruby_llm'
-gem 'kramdown'  # Markdown to HTML conversion
-gem 'google-ads-googleads', '~> 32.0'  # Official Google Ads API client
+gem "ruby_llm"
+gem "kramdown"  # Markdown to HTML conversion
+gem "google-ads-googleads", "~> 32.0"  # Official Google Ads API client
 
 # Email
-gem 'resend'
+gem "resend"
 
 # Env in dev/test
-gem 'dotenv-rails', groups: [:development, :test]
+gem "dotenv-rails", groups: [ :development, :test ]
 
 # Dev tools
-gem 'annotate', group: [:development]
-gem 'letter_opener_web', group: [:development]
+gem "annotate", group: [ :development ]
+gem "letter_opener_web", group: [ :development ]
 
 # Hardening/lint
-gem 'rack-attack'
-gem 'rubocop-rails', group: :development
+gem "rack-attack"
+gem "rubocop-rails", group: :development
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem "rails", "~> 8.0.3"
@@ -68,7 +68,7 @@ gem "thruster", require: false
 # gem "image_processing", "~> 1.2"
 
 group :development, :test do
-  gem 'pry'
+  gem "pry"
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
 

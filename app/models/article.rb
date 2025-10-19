@@ -40,7 +40,7 @@ class Article < ApplicationRecord
 
   def export_html
     # Use a markdown processor (e.g., kramdown)
-    require 'kramdown'
+    require "kramdown"
     Kramdown::Document.new(content || "").to_html
   end
 end

@@ -96,13 +96,13 @@ class KeywordResearchService
       Rails.logger.info "Found #{all_serp_results.size} search results"
 
       # Extract candidate domains from SERP
-      user_domain_host = URI(@project.domain).host.gsub(/^www\./, '')
+      user_domain_host = URI(@project.domain).host.gsub(/^www\./, "")
 
       competitor_candidates = all_serp_results.map do |result|
         next unless result[:url]
 
         uri = URI(result[:url])
-        host = uri.host.gsub(/^www\./, '')
+        host = uri.host.gsub(/^www\./, "")
         domain = "#{uri.scheme}://#{uri.host}"
 
         # Skip user's own domain
@@ -112,7 +112,7 @@ class KeywordResearchService
           domain: domain,
           title: result[:title],
           description: result[:snippet],
-          source: 'auto_detected'
+          source: "auto_detected"
         }
       end.compact.uniq { |c| c[:domain] }
 
@@ -187,7 +187,7 @@ class KeywordResearchService
       # Google Ads API keyword suggestions (BEST - includes metrics + variations)
       if ENV["GOOGLE_ADS_DEVELOPER_TOKEN"].present?
         google_ads = GoogleAdsService.new
-        ads_metrics = google_ads.get_keyword_metrics([seed])
+        ads_metrics = google_ads.get_keyword_metrics([ seed ])
 
         if ads_metrics
           # Extract just the keywords from the metrics hash
@@ -386,7 +386,7 @@ class KeywordResearchService
     # If scraping failed or returned minimal data, fall back to basic context
     if domain_data.nil? || domain_data.empty? || domain_data[:error]
       Rails.logger.warn "Could not scrape domain, using basic context (project name + niche)"
-      return [@project.name, @project.niche, @project.description].compact.join(". ")
+      return [ @project.name, @project.niche, @project.description ].compact.join(". ")
     end
 
     # Convert to symbol keys if needed (domain_analysis is stored with string keys in JSONB)
@@ -515,7 +515,7 @@ class KeywordResearchService
     raw_topic = domain_data[:h1s]&.first || domain_data[:title] || ""
 
     # Clean it up - remove site name/branding
-    topic = raw_topic.split('|').first.strip
+    topic = raw_topic.split("|").first.strip
 
     # Don't use overly generic niches
     generic_niches = %w[saas software app platform tool service business]
@@ -573,7 +573,7 @@ class KeywordResearchService
 
     client = Ai::ClientService.for_keyword_analysis
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       system_prompt: "You are an expert at identifying competitive products and filtering out non-competitive sites.",
       max_tokens: 500,
       temperature: 0.3
@@ -596,5 +596,4 @@ class KeywordResearchService
       candidates
     end
   end
-
 end

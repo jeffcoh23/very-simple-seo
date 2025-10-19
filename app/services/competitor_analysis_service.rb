@@ -51,28 +51,28 @@ class CompetitorAnalysisService
           http.request(request)
         end
 
-        next unless response.code == '200'
+        next unless response.code == "200"
 
         # Decompress if gzipped
-        content = if sitemap_url.end_with?('.gz')
+        content = if sitemap_url.end_with?(".gz")
                     decompress_gzip(response.body)
-                  else
+        else
                     response.body
-                  end
+        end
 
         xml = Nokogiri::XML(content)
 
         # Extract URLs from sitemap
-        urls = xml.xpath('//xmlns:loc').map(&:text)
+        urls = xml.xpath("//xmlns:loc").map(&:text)
 
         # Convert URLs to keywords
         urls.each do |url|
           # Extract path segment: "https://example.com/validate-startup-idea" → "validate startup idea"
           path = URI(url).path
-          segments = path.split('/').reject(&:empty?)
+          segments = path.split("/").reject(&:empty?)
 
           segments.each do |segment|
-            keyword = segment.gsub(/[-_]/, ' ').downcase
+            keyword = segment.gsub(/[-_]/, " ").downcase
             keywords << keyword if keyword.length > 5 && keyword.length < 100
           end
         end
@@ -110,25 +110,25 @@ class CompetitorAnalysisService
           http.request(request)
         end
 
-        next unless response.code == '200'
+        next unless response.code == "200"
 
         doc = Nokogiri::HTML(response.body)
 
         # Extract title tag
-        title = doc.at_css('title')&.text
+        title = doc.at_css("title")&.text
         keywords << title.downcase if title && title.length < 100
 
         # Extract H1s
-        h1s = doc.css('h1').map(&:text).map(&:downcase)
+        h1s = doc.css("h1").map(&:text).map(&:downcase)
         keywords.concat(h1s.select { |h| h.length > 5 && h.length < 100 })
 
         # Extract H2s (might contain keyword phrases)
-        h2s = doc.css('h2').map(&:text).map(&:downcase)
+        h2s = doc.css("h2").map(&:text).map(&:downcase)
         keywords.concat(h2s.select { |h| h.length > 5 && h.length < 100 })
 
         # Extract meta description
         meta_desc = doc.at_css('meta[name="description"]')
-        keywords << meta_desc['content'].downcase if meta_desc && meta_desc['content']
+        keywords << meta_desc["content"].downcase if meta_desc && meta_desc["content"]
 
       rescue => e
         # Page failed, continue to next
@@ -141,8 +141,8 @@ class CompetitorAnalysisService
   end
 
   def decompress_gzip(gzipped_content)
-    require 'zlib'
-    require 'stringio'
+    require "zlib"
+    require "stringio"
 
     gz = Zlib::GzipReader.new(StringIO.new(gzipped_content))
     gz.read

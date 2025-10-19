@@ -69,7 +69,7 @@ class KeywordResearchJob < ApplicationJob
     # Step 7: Calculate metrics
     total_keywords = service.instance_variable_get(:@keywords).size
     broadcast_progress("📊 Calculating metrics for #{total_keywords} keywords...")
-    use_google_ads = ENV['GOOGLE_ADS_DEVELOPER_TOKEN'].present?
+    use_google_ads = ENV["GOOGLE_ADS_DEVELOPER_TOKEN"].present?
     if use_google_ads
       broadcast_progress("→ Using Google Ads API for accurate data", indent: 1)
     else

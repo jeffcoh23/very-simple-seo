@@ -57,15 +57,15 @@ class CompetitorDiscoveryComparisonTest < ActiveSupport::TestCase
     puts "Google Search found: #{google_competitors.size} competitors"
     puts "Grounding found: #{grounding_competitors.size} competitors"
     puts ""
-    puts "Overlap: #{(google_competitors.map{|c| c[:domain]} & grounding_competitors.map{|c| c[:domain]}).size} competitors"
+    puts "Overlap: #{(google_competitors.map { |c| c[:domain] } & grounding_competitors.map { |c| c[:domain] }).size} competitors"
     puts ""
     puts "Google-only competitors:"
-    (google_competitors.map{|c| c[:domain]} - grounding_competitors.map{|c| c[:domain]}).each do |domain|
+    (google_competitors.map { |c| c[:domain] } - grounding_competitors.map { |c| c[:domain] }).each do |domain|
       puts "  - #{domain}"
     end
     puts ""
     puts "Grounding-only competitors:"
-    (grounding_competitors.map{|c| c[:domain]} - google_competitors.map{|c| c[:domain]}).each do |domain|
+    (grounding_competitors.map { |c| c[:domain] } - google_competitors.map { |c| c[:domain] }).each do |domain|
       puts "  - #{domain}"
     end
     puts "="*80
@@ -82,22 +82,22 @@ class CompetitorDiscoveryComparisonTest < ActiveSupport::TestCase
     combined = "#{title} #{description}".downcase
     stop_words = %w[the a an and or but for with from about in on at to of is are was were be been being have has had do does did will would could should may might must can]
     words = combined.split(/\W+/).reject { |w| stop_words.include?(w) || w.length < 3 }
-    main_terms = words.first(4).join(' ')
+    main_terms = words.first(4).join(" ")
 
     puts "Search query: '#{main_terms}'"
 
-    api_key = ENV['GOOGLE_SEARCH_KEY']
-    cx = ENV['GOOGLE_SEARCH_CX']
+    api_key = ENV["GOOGLE_SEARCH_KEY"]
+    cx = ENV["GOOGLE_SEARCH_CX"]
 
     return [] unless api_key.present?
 
-    require 'net/http'
+    require "net/http"
 
     all_results = []
 
     # Fetch 3 pages (30 results)
-    [1, 11, 21].each do |start_index|
-      uri = URI('https://www.googleapis.com/customsearch/v1')
+    [ 1, 11, 21 ].each do |start_index|
+      uri = URI("https://www.googleapis.com/customsearch/v1")
       params = {
         key: api_key,
         cx: cx,
@@ -111,24 +111,24 @@ class CompetitorDiscoveryComparisonTest < ActiveSupport::TestCase
       next unless response.is_a?(Net::HTTPSuccess)
 
       data = JSON.parse(response.body)
-      items = data['items'] || []
+      items = data["items"] || []
 
       items.each do |item|
-        next unless item['link']
+        next unless item["link"]
 
         begin
-          url = item['link']
+          url = item["link"]
           uri_obj = URI(url)
-          host = uri_obj.host.gsub(/^www\./, '')
+          host = uri_obj.host.gsub(/^www\./, "")
 
           # Skip own domain only
-          next if host.include?(@domain.gsub(%r{^https?://}, '').gsub(/^www\./, ''))
+          next if host.include?(@domain.gsub(%r{^https?://}, "").gsub(/^www\./, ""))
 
           all_results << {
             url: url,
             domain: "https://#{uri_obj.host}",
-            title: item['title'],
-            snippet: item['snippet']
+            title: item["title"],
+            snippet: item["snippet"]
           }
         rescue URI::InvalidURIError
           next
@@ -140,7 +140,7 @@ class CompetitorDiscoveryComparisonTest < ActiveSupport::TestCase
 
     all_results.uniq { |r| r[:domain] }.map do |r|
       {
-        domain: r[:domain].gsub(%r{^https?://}, '').gsub(/^www\./, ''),
+        domain: r[:domain].gsub(%r{^https?://}, "").gsub(/^www\./, ""),
         title: r[:title],
         description: r[:snippet]
       }
@@ -189,7 +189,7 @@ class CompetitorDiscoveryComparisonTest < ActiveSupport::TestCase
       Find as many as you can (aim for 10-20+ if they exist).
     QUERY
 
-    json_structure = [{domain: "competitor.com", title: "Name", description: "What they do"}].to_json
+    json_structure = [ { domain: "competitor.com", title: "Name", description: "What they do" } ].to_json
     result = grounding.search_json(query, json_structure_hint: json_structure)
 
     return [] unless result[:success]
@@ -211,17 +211,17 @@ class CompetitorDiscoveryComparisonTest < ActiveSupport::TestCase
       next unless domain
 
       domain = domain.to_s.strip
-                   .gsub(%r{^https?://}, '')
-                   .gsub(%r{^www\.}, '')
-                   .gsub(%r{/$}, '')
-                   .split('/').first
+                   .gsub(%r{^https?://}, "")
+                   .gsub(%r{^www\.}, "")
+                   .gsub(%r{/$}, "")
+                   .split("/").first
                    .downcase
 
-      next if domain.empty? || !domain.include?('.')
+      next if domain.empty? || !domain.include?(".")
 
       {
         domain: domain,
-        title: c["title"] || c["name"] || domain.split('.').first.capitalize,
+        title: c["title"] || c["name"] || domain.split(".").first.capitalize,
         description: c["description"] || c["what_they_do"] || ""
       }
     end.compact

@@ -10,10 +10,10 @@ class GoogleAdsService
 
   def initialize
     @client = nil
-    @customer_id = ENV["GOOGLE_ADS_CUSTOMER_ID"]&.gsub(/[^0-9]/, '')
+    @customer_id = ENV["GOOGLE_ADS_CUSTOMER_ID"]&.gsub(/[^0-9]/, "")
   end
 
-  def get_keyword_metrics(keywords, location: 'United States', language: 'English')
+  def get_keyword_metrics(keywords, location: "United States", language: "English")
     # Keywords can be array or single keyword
     keywords = [ keywords ] unless keywords.is_a?(Array)
 
@@ -100,17 +100,17 @@ class GoogleAdsService
   def initialize_client
     # Configure the client using environment variables
     Google::Ads::GoogleAds::Config.new do |c|
-      c.client_id = ENV['GOOGLE_ADS_CLIENT_ID']
-      c.client_secret = ENV['GOOGLE_ADS_CLIENT_SECRET']
-      c.refresh_token = ENV['GOOGLE_ADS_REFRESH_TOKEN']
-      c.developer_token = ENV['GOOGLE_ADS_DEVELOPER_TOKEN']
+      c.client_id = ENV["GOOGLE_ADS_CLIENT_ID"]
+      c.client_secret = ENV["GOOGLE_ADS_CLIENT_SECRET"]
+      c.refresh_token = ENV["GOOGLE_ADS_REFRESH_TOKEN"]
+      c.developer_token = ENV["GOOGLE_ADS_DEVELOPER_TOKEN"]
       c.login_customer_id = @customer_id
     end
 
     @client = Google::Ads::GoogleAds::GoogleAdsClient.new
   end
 
-  def fetch_keyword_ideas(keywords, location: 'United States', language: 'English')
+  def fetch_keyword_ideas(keywords, location: "United States", language: "English")
     keyword_plan_idea_service = @client.service.keyword_plan_idea
 
     # Build the keyword seed using the client's resource factory
@@ -127,7 +127,7 @@ class GoogleAdsService
     response = keyword_plan_idea_service.generate_keyword_ideas(
       customer_id: @customer_id,
       language: @client.path.language_constant(language_constant),
-      geo_target_constants: [@client.path.geo_target_constant(geo_target)],
+      geo_target_constants: [ @client.path.geo_target_constant(geo_target) ],
       keyword_plan_network: :GOOGLE_SEARCH,
       keyword_seed: keyword_seed
     )
@@ -175,13 +175,13 @@ class GoogleAdsService
   # Map location names to Google Ads geo target constants
   def geo_target_constant_for_location(location)
     case location.downcase
-    when 'united states', 'us', 'usa'
+    when "united states", "us", "usa"
       2840
-    when 'united kingdom', 'uk', 'gb'
+    when "united kingdom", "uk", "gb"
       2826
-    when 'canada', 'ca'
+    when "canada", "ca"
       2124
-    when 'australia', 'au'
+    when "australia", "au"
       2036
     else
       2840 # Default to United States
@@ -191,13 +191,13 @@ class GoogleAdsService
   # Map language names to Google Ads language constants
   def language_constant_for_language(language)
     case language.downcase
-    when 'english', 'en'
+    when "english", "en"
       1000
-    when 'spanish', 'es'
+    when "spanish", "es"
       1003
-    when 'french', 'fr'
+    when "french", "fr"
       1002
-    when 'german', 'de'
+    when "german", "de"
       1001
     else
       1000 # Default to English

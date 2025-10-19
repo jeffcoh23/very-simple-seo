@@ -76,11 +76,11 @@ class ArticleImprovementService
     Rails.logger.info "Pass 1: Fixing overused examples"
 
     # Count company mentions
-    examples = @serp_data['detailed_examples'] || []
+    examples = @serp_data["detailed_examples"] || []
     company_counts = Hash.new(0)
 
     examples.each do |ex|
-      company = ex['company']
+      company = ex["company"]
       company_counts[company] += markdown.scan(/#{Regexp.escape(company)}/i).size
     end
 
@@ -114,7 +114,7 @@ class ArticleImprovementService
 
     client = Ai::ClientService.for_article_improvement
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 4000,
       temperature: 0.7
     )
@@ -161,7 +161,7 @@ class ArticleImprovementService
 
     client = Ai::ClientService.for_article_improvement
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 4000,
       temperature: 0.7
     )
@@ -179,11 +179,11 @@ class ArticleImprovementService
     Rails.logger.info "Pass 2: Fixing overused statistics"
 
     # Count statistic mentions
-    statistics = @serp_data['statistics'] || []
+    statistics = @serp_data["statistics"] || []
     stat_counts = Hash.new(0)
 
     statistics.each do |stat|
-      stat_text = stat['stat']
+      stat_text = stat["stat"]
       # Count how many times this exact stat appears
       stat_counts[stat_text] += markdown.scan(/#{Regexp.escape(stat_text)}/i).size
     end
@@ -216,7 +216,7 @@ class ArticleImprovementService
 
     client = Ai::ClientService.for_article_improvement
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 4000,
       temperature: 0.7
     )
@@ -238,7 +238,7 @@ class ArticleImprovementService
     current_paragraph = []
 
     markdown.split("\n").each do |line|
-      if line.strip.empty? || line.start_with?('#')
+      if line.strip.empty? || line.start_with?("#")
         if current_paragraph.any?
           text = current_paragraph.join(" ")
           sentence_count = text.scan(/[.!?]+/).size
@@ -246,7 +246,7 @@ class ArticleImprovementService
           current_paragraph = []
         end
       else
-        current_paragraph << line unless line.start_with?('#')
+        current_paragraph << line unless line.start_with?("#")
       end
     end
 
@@ -275,7 +275,7 @@ class ArticleImprovementService
 
     client = Ai::ClientService.for_article_improvement
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 4000,
       temperature: 0.7
     )
@@ -333,7 +333,7 @@ class ArticleImprovementService
 
     client = Ai::ClientService.for_article_improvement
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 5000, # Higher token limit for expansion
       temperature: 0.7
     )
@@ -358,7 +358,7 @@ class ArticleImprovementService
     brand_count = markdown.scan(/#{Regexp.escape(brand_name)}/i).size
 
     # Count placeholder CTAs
-    has_placeholders = markdown.include?('example.com') || markdown.include?('yourdomain.com')
+    has_placeholders = markdown.include?("example.com") || markdown.include?("yourdomain.com")
 
     # Needs improvement if: no brand mentions OR has placeholders
     needs_improvement = brand_count == 0 || has_placeholders
@@ -401,7 +401,7 @@ class ArticleImprovementService
 
     client = Ai::ClientService.for_article_improvement
     response = client.chat(
-      messages: [{ role: "user", content: prompt }],
+      messages: [ { role: "user", content: prompt } ],
       max_tokens: 5000,
       temperature: 0.7
     )

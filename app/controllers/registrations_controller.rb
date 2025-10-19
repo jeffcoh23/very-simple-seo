@@ -1,6 +1,6 @@
 class RegistrationsController < ApplicationController
-  allow_unauthenticated_access only: [:new, :create]
-  before_action :redirect_if_authenticated, only: [:new]
+  allow_unauthenticated_access only: [ :new, :create ]
+  before_action :redirect_if_authenticated, only: [ :new ]
 
   def new
     plan = params[:plan] || "free"
@@ -40,7 +40,7 @@ class RegistrationsController < ApplicationController
     render inertia: "Auth/Signup", props: {
       plan: selected_plan,
       plans: PlansService.for_frontend,
-      errors: ["Email address has already been taken"]
+      errors: [ "Email address has already been taken" ]
     }, status: :unprocessable_entity
   end
 
