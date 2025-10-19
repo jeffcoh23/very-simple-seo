@@ -142,7 +142,7 @@ class ArticleWriterService
     client = Ai::ClientService.for_article_writing
     response = client.chat(
       messages: [ { role: "user", content: prompt } ],
-      max_tokens: (word_count * 2).to_i, # Tokens ≈ words * 1.3, give buffer
+      max_tokens: 8000,
       temperature: 0.8
     )
 
@@ -293,7 +293,7 @@ class ArticleWriterService
     client = Ai::ClientService.for_article_writing
     response = client.chat(
       messages: [ { role: "user", content: prompt } ],
-      max_tokens: (word_count * 2).to_i,
+      max_tokens: 8000,
       temperature: 0.8
     )
 
@@ -369,7 +369,7 @@ class ArticleWriterService
     client = Ai::ClientService.for_article_writing
     response = client.chat(
       messages: [ { role: "user", content: prompt } ],
-      max_tokens: (word_count * 2).to_i,
+      max_tokens: 8000,
       temperature: 0.8
     )
 
@@ -431,7 +431,7 @@ class ArticleWriterService
     client = Ai::ClientService.for_article_writing
     response = client.chat(
       messages: [ { role: "user", content: prompt } ],
-      max_tokens: (word_count * 2).to_i,
+      max_tokens: 8000,
       temperature: 0.7
     )
 

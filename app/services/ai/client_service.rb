@@ -1,22 +1,13 @@
-# app/services/ai/client_service.rb
 class Ai::ClientService
-  # Model configuration for different services
-  # Using Claude Haiku 4.5 for article generation (better instruction following)
-  # Using gpt-4o-mini for simpler analysis tasks
   MODELS = {
-    # Article generation: Claude Haiku 4.5 (excellent at following complex instructions)
-    outline_generation: { provider: "anthropic", model: "claude-haiku-4.5" },
-    article_writing: { provider: "anthropic", model: "claude-haiku-4.5" },
-    article_improvement: { provider: "anthropic", model: "claude-haiku-4.5" },
-
-    # Simple analysis tasks: GPT-4o-mini (cheaper)
+    outline_generation: { provider: "anthropic", model: "claude-haiku-4-5" },
+    article_writing: { provider: "anthropic", model: "claude-haiku-4-5" },
+    article_improvement: { provider: "anthropic", model: "claude-haiku-4-5" },
     keyword_analysis: { provider: "openai", model: "gpt-4o-mini" },
     serp_analysis: { provider: "openai", model: "gpt-4o-mini" },
-
-    # Grounding research providers
     grounding_research: { provider: "gemini", model: "gemini-2.5-flash" },
     perplexity_search: { provider: "perplexity", model: "sonar" },
-    openai_search: { provider: "openai", model: "gpt-4o" } # Future
+    openai_search: { provider: "openai", model: "gpt-4o" }
   }.freeze
 
   def initialize(service_name)
@@ -26,34 +17,49 @@ class Ai::ClientService
     @service_name = service_name
   end
 
-  # Standard chat (no grounding)
-  def chat(messages:, max_tokens: 1000, temperature: 0.7, system_prompt: nil)
-    Rails.logger.info "AI Request: #{@provider}/#{@model} (tokens: #{max_tokens})"
+  def chat(messages:, max_tokens: nil, temperature: 0.7, system_prompt: nil)
+    Rails.logger.info "AI Request: #{@provider}/#{@model} (tokens: #{max_tokens || 'unlimited'})"
 
     begin
-      chat = RubyLLM.chat(provider: @provider, model: @model)
-                    .with_temperature(temperature)
+      chat = RubyLLM.chat(
+        provider: @provider,
+        model: @model,
+        assume_model_exists: true
+      ).with_temperature(temperature)
 
-      # Provider-specific parameters
-      case @provider
-      when "gemini"
-        chat = chat.with_params(generationConfig: {
-          maxOutputTokens: max_tokens
-        })
-      when "perplexity"
-        chat = chat.with_params(
-          max_tokens: max_tokens,
-          return_citations: true, # Perplexity-specific
-          return_related_questions: false
-        )
+      if max_tokens
+        case @provider
+        when "gemini"
+          chat = chat.with_params(generationConfig: {
+            maxOutputTokens: max_tokens
+          })
+        when "perplexity"
+          chat = chat.with_params(
+            max_tokens: max_tokens,
+            return_citations: true,
+            return_related_questions: false
+          )
+        when "openai"
+          if @model.start_with?("gpt-5")
+            chat = chat.with_params(max_completion_tokens: max_tokens)
+          else
+            chat = chat.with_params(max_tokens: max_tokens)
+          end
+        else
+          chat = chat.with_params(max_tokens: max_tokens)
+        end
       else
-        chat = chat.with_params(max_tokens: max_tokens)
+        case @provider
+        when "perplexity"
+          chat = chat.with_params(
+            return_citations: true,
+            return_related_questions: false
+          )
+        end
       end
 
-      # Add system instructions
       chat = chat.with_instructions(system_prompt) if system_prompt.present?
 
-      # Get response
       prompt = messages.last[:content]
       response = chat.ask(prompt)
 
@@ -71,7 +77,6 @@ class Ai::ClientService
     end
   end
 
-  # NEW: Chat with Gemini grounding (google_search tool)
   def chat_with_grounding(messages:, max_tokens: 8000, temperature: 0.3)
     Rails.logger.info "AI Grounding Request: #{@provider}/#{@model} (tokens: #{max_tokens})"
 
@@ -81,7 +86,7 @@ class Ai::ClientService
       chat = RubyLLM.chat(provider: @provider, model: @model)
                     .with_temperature(temperature)
                     .with_params(
-                      tools: [ { google_search: {} } ], # Enable Google Search grounding
+                      tools: [ { google_search: {} } ],
                       generationConfig: {
                         maxOutputTokens: max_tokens
                       }
@@ -104,7 +109,6 @@ class Ai::ClientService
     end
   end
 
-  # Convenience constructors
   def self.for_keyword_analysis
     new(:keyword_analysis)
   end
@@ -125,7 +129,6 @@ class Ai::ClientService
     new(:serp_analysis)
   end
 
-  # NEW: Grounding constructors
   def self.for_grounding_research
     new(:grounding_research)
   end
