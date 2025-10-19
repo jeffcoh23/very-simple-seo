@@ -5,7 +5,7 @@ gem "inertia_rails"
 
 # Billing
 gem "pay"
-gem "stripe", "~> 15" # Pay requires stripe ~> 15
+gem "stripe", "~> 17" # Pay requires stripe ~> 15
 
 # SEO
 gem "sitemap_generator"
