@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ArrowLeft, Loader2, TrendingUp, Eye, Star, FileText, ChevronDown, ChevronUp, Filter, X, Key } from "lucide-react"
 
 export default function ProjectsShow() {
-  const { project, keywordResearch, keywords, articles } = usePage().props
+  const { project, keywordResearch, keywords, articles, view, stats } = usePage().props
   const { routes, auth } = usePage().props
 
   const [researchStatus, setResearchStatus] = useState(keywordResearch?.status)
@@ -23,6 +23,7 @@ export default function ProjectsShow() {
   const [intentFilter, setIntentFilter] = useState("all")
   const [difficultyFilter, setDifficultyFilter] = useState("all")
   const [sortBy, setSortBy] = useState("opportunity")
+  const [expandedClusters, setExpandedClusters] = useState(new Set())
 
   // Auto-scroll progress log when new messages arrive
   useEffect(() => {
@@ -157,6 +158,28 @@ export default function ProjectsShow() {
   const clearFilters = () => {
     setIntentFilter("all")
     setDifficultyFilter("all")
+  }
+
+  // Toggle cluster view
+  const toggleView = () => {
+    const newView = view === "representatives" ? "all" : "representatives"
+    router.visit(`${window.location.pathname}?view=${newView}`, {
+      preserveState: true,
+      preserveScroll: true
+    })
+  }
+
+  // Toggle cluster expansion
+  const toggleCluster = (clusterId) => {
+    setExpandedClusters(prev => {
+      const next = new Set(prev)
+      if (next.has(clusterId)) {
+        next.delete(clusterId)
+      } else {
+        next.add(clusterId)
+      }
+      return next
+    })
   }
 
   return (
@@ -318,12 +341,35 @@ export default function ProjectsShow() {
                       Top keyword opportunities for your content strategy
                     </CardDescription>
                   </div>
-                  {activeFiltersCount > 0 && (
-                    <Button variant="outline" size="sm" onClick={clearFilters} className="border-2">
-                      <X className="h-4 w-4 mr-2" />
-                      Clear {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''}
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* Cluster View Toggle */}
+                    {stats && stats.cluster_representatives > 0 && (
+                      <Button
+                        variant={view === "representatives" ? "default" : "outline"}
+                        size="sm"
+                        onClick={toggleView}
+                        className="border-2"
+                      >
+                        {view === "representatives" ? (
+                          <>
+                            <ChevronDown className="h-4 w-4 mr-2" />
+                            Representatives ({stats.cluster_representatives + stats.unclustered})
+                          </>
+                        ) : (
+                          <>
+                            <ChevronUp className="h-4 w-4 mr-2" />
+                            All Variations ({stats.total_keywords})
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    {activeFiltersCount > 0 && (
+                      <Button variant="outline" size="sm" onClick={clearFilters} className="border-2">
+                        <X className="h-4 w-4 mr-2" />
+                        Clear {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -445,61 +491,97 @@ export default function ProjectsShow() {
                         <tbody>
                           {filteredAndSortedKeywords.map((keyword) => {
                             const difficultyBadge = getDifficultyBadge(keyword.difficulty)
+                            const isClusterRep = keyword.cluster_id && keyword.is_cluster_representative
+                            const hasClusterSiblings = isClusterRep && keyword.cluster_keywords && keyword.cluster_keywords.length > 0
+                            const isExpanded = expandedClusters.has(keyword.cluster_id)
 
                             return (
-                              <tr key={keyword.id} className="border-b-2 hover:bg-muted/50 transition-colors">
-                                <td className="py-3 px-4">
-                                  <div className="flex items-center gap-2">
-                                    {keyword.starred && (
-                                      <Star className="h-4 w-4 fill-accent text-accent" />
+                              <>
+                                <tr
+                                  key={keyword.id}
+                                  className={`border-b-2 hover:bg-muted/50 transition-colors ${hasClusterSiblings ? 'cursor-pointer' : ''}`}
+                                  onClick={hasClusterSiblings ? () => toggleCluster(keyword.cluster_id) : undefined}
+                                >
+                                  <td className="py-3 px-4">
+                                    <div className="flex items-center gap-2">
+                                      {hasClusterSiblings && (
+                                        isExpanded ? (
+                                          <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                        ) : (
+                                          <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                        )
+                                      )}
+                                      {keyword.starred && (
+                                        <Star className="h-4 w-4 fill-accent text-accent" />
+                                      )}
+                                      <span className="font-medium">{keyword.keyword}</span>
+                                      {isClusterRep && keyword.cluster_size > 1 && (
+                                        <Badge variant="outline" className="text-xs border-primary/30 text-primary">
+                                          +{keyword.cluster_size - 1} variation{keyword.cluster_size - 1 !== 1 ? 's' : ''}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    <Badge className={getIntentBadge(keyword.intent)}>
+                                      {keyword.intent}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    {keyword.volume ? keyword.volume.toLocaleString() : "—"}
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <Badge className={difficultyBadge.color}>
+                                      {difficultyBadge.label} ({keyword.difficulty})
+                                    </Badge>
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <TrendingUp className="h-4 w-4 text-success" />
+                                      <span className="font-semibold">{keyword.opportunity}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    {keyword.cpc ? `$${Number(keyword.cpc).toFixed(2)}` : "—"}
+                                  </td>
+                                  <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                    {keyword.has_article ? (
+                                      <Link href={keyword.article_url}>
+                                        <Button size="sm" variant="outline" className="border-2">
+                                          <Eye className="mr-2 h-4 w-4" />
+                                          View Article
+                                        </Button>
+                                      </Link>
+                                    ) : (
+                                      <Link href={keyword.new_article_url}>
+                                        <Button
+                                          size="sm"
+                                          className="border-2 shadow-md hover:shadow-lg"
+                                          disabled={!auth.user.has_credits}
+                                        >
+                                          <FileText className="mr-2 h-4 w-4" />
+                                          Generate Article
+                                        </Button>
+                                      </Link>
                                     )}
-                                    <span className="font-medium">{keyword.keyword}</span>
-                                  </div>
-                                </td>
-                                <td className="py-3 px-4">
-                                  <Badge className={getIntentBadge(keyword.intent)}>
-                                    {keyword.intent}
-                                  </Badge>
-                                </td>
-                                <td className="py-3 px-4 text-center">
-                                  {keyword.volume ? keyword.volume.toLocaleString() : "—"}
-                                </td>
-                                <td className="py-3 px-4 text-center">
-                                  <Badge className={difficultyBadge.color}>
-                                    {difficultyBadge.label} ({keyword.difficulty})
-                                  </Badge>
-                                </td>
-                                <td className="py-3 px-4 text-center">
-                                  <div className="flex items-center justify-center gap-1">
-                                    <TrendingUp className="h-4 w-4 text-success" />
-                                    <span className="font-semibold">{keyword.opportunity}</span>
-                                  </div>
-                                </td>
-                                <td className="py-3 px-4 text-center">
-                                  {keyword.cpc ? `$${Number(keyword.cpc).toFixed(2)}` : "—"}
-                                </td>
-                                <td className="py-3 px-4 text-right">
-                                  {keyword.has_article ? (
-                                    <Link href={keyword.article_url}>
-                                      <Button size="sm" variant="outline" className="border-2">
-                                        <Eye className="mr-2 h-4 w-4" />
-                                        View Article
-                                      </Button>
-                                    </Link>
-                                  ) : (
-                                    <Link href={keyword.new_article_url}>
-                                      <Button
-                                        size="sm"
-                                        className="border-2 shadow-md hover:shadow-lg"
-                                        disabled={!auth.user.has_credits}
-                                      >
-                                        <FileText className="mr-2 h-4 w-4" />
-                                        Generate Article
-                                      </Button>
-                                    </Link>
-                                  )}
-                                </td>
-                              </tr>
+                                  </td>
+                                </tr>
+
+                                {/* Cluster siblings (expanded) */}
+                                {isExpanded && hasClusterSiblings && keyword.cluster_keywords.map((siblingText, idx) => (
+                                  <tr key={`${keyword.id}-sibling-${idx}`} className="border-b bg-muted/30">
+                                    <td className="py-2 px-4 pl-12">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm text-muted-foreground font-mono">{siblingText}</span>
+                                        <Badge variant="outline" className="text-xs">variation</Badge>
+                                      </div>
+                                    </td>
+                                    <td colSpan="6" className="py-2 px-4 text-sm text-muted-foreground">
+                                      Similar to representative keyword
+                                    </td>
+                                  </tr>
+                                ))}
+                              </>
                             )
                           })}
                         </tbody>

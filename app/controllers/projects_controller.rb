@@ -38,14 +38,34 @@ class ProjectsController < ApplicationController
   def show
     # Get the latest keyword research
     @keyword_research = @project.keyword_researches.order(created_at: :desc).first
-    @keywords = @project.keywords.by_opportunity.limit(50)
+
+    # Handle view parameter for cluster filtering
+    view = params[:view] || "representatives"
+
+    # Filter keywords based on view
+    @keywords = if view == "all"
+      @project.keywords.by_opportunity.limit(50)
+    else
+      # Show cluster representatives + unclustered keywords (default)
+      @project.keywords
+        .where("is_cluster_representative = ? OR cluster_id IS NULL", true)
+        .by_opportunity
+        .limit(50)
+    end
+
     @articles = @project.articles.order(created_at: :desc).limit(20)
 
     render inertia: "App/Projects/Show", props: {
       project: project_props(@project).merge(routes: project_routes(@project)),
       keywordResearch: @keyword_research ? keyword_research_props(@keyword_research) : nil,
       keywords: @keywords.map { |k| keyword_props(k) },
-      articles: @articles.map { |a| article_props(a) }
+      articles: @articles.map { |a| article_props(a) },
+      view: view,
+      stats: {
+        total_keywords: @project.keywords.count,
+        cluster_representatives: @project.keywords.cluster_representatives.count,
+        unclustered: @project.keywords.unclustered.count
+      }
     }
   end
 
@@ -177,7 +197,7 @@ class ProjectsController < ApplicationController
   end
 
   def keyword_props(keyword)
-    {
+    props = {
       id: keyword.id,
       keyword: keyword.keyword,
       volume: keyword.volume,
@@ -192,6 +212,25 @@ class ProjectsController < ApplicationController
       article_url: keyword.article.present? ? article_path(keyword.article) : nil,
       new_article_url: new_keyword_article_path(keyword.id)
     }
+
+    # Add cluster information if keyword is clustered
+    if keyword.clustered?
+      props.merge!(
+        cluster_id: keyword.cluster_id,
+        is_cluster_representative: keyword.is_cluster_representative,
+        cluster_size: keyword.cluster_size,
+        cluster_keywords: keyword.cluster_keywords || []
+      )
+    else
+      props.merge!(
+        cluster_id: nil,
+        is_cluster_representative: false,
+        cluster_size: 1,
+        cluster_keywords: []
+      )
+    end
+
+    props
   end
 
   def article_props(article)
