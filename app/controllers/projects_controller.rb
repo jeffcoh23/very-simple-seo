@@ -1,6 +1,6 @@
 # app/controllers/projects_controller.rb
 class ProjectsController < ApplicationController
-  before_action :set_project, only: [ :show, :keywords, :articles_tab, :edit, :update, :destroy ]
+  before_action :set_project, only: [ :show, :edit, :update, :destroy ]
 
   # GET /projects
   def index
@@ -34,13 +34,8 @@ class ProjectsController < ApplicationController
     end
   end
 
-  # GET /projects/:id (redirect to keywords tab)
+  # GET /projects/:id
   def show
-    redirect_to keywords_project_path(@project)
-  end
-
-  # GET /projects/:id/keywords
-  def keywords
     # Get the latest keyword research
     @keyword_research = @project.keyword_researches.order(created_at: :desc).first
 
@@ -58,26 +53,20 @@ class ProjectsController < ApplicationController
         .limit(50)
     end
 
-    render inertia: "App/Projects/Keywords", props: {
+    # Load articles
+    @articles = @project.articles.order(created_at: :desc).limit(20)
+
+    render inertia: "App/Projects/Show", props: {
       project: project_props(@project).merge(routes: project_routes(@project)),
       keywordResearch: @keyword_research ? keyword_research_props(@keyword_research) : nil,
       keywords: @keywords.map { |k| keyword_props(k) },
+      articles: @articles.map { |a| article_props(a) },
       view: view,
       stats: {
         total_keywords: @project.keywords.count,
         cluster_representatives: @project.keywords.cluster_representatives.count,
         unclustered: @project.keywords.unclustered.count
       }
-    }
-  end
-
-  # GET /projects/:id/articles
-  def articles_tab
-    @articles = @project.articles.order(created_at: :desc).limit(20)
-
-    render inertia: "App/Projects/Articles", props: {
-      project: project_props(@project).merge(routes: project_routes(@project)),
-      articles: @articles.map { |a| article_props(a) }
     }
   end
 

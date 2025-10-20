@@ -12,6 +12,10 @@ export default function ProjectsShow() {
   const { project, keywordResearch, keywords, articles, view, stats } = usePage().props
   const { routes, auth } = usePage().props
 
+  // Get active tab from URL or default to keywords
+  const searchParams = new URLSearchParams(window.location.search)
+  const activeTab = searchParams.get('tab') || 'keywords'
+
   const [researchStatus, setResearchStatus] = useState(keywordResearch?.status)
   const [keywordsFound, setKeywordsFound] = useState(keywordResearch?.total_keywords_found || 0)
   const [progressMessage, setProgressMessage] = useState("")
@@ -160,10 +164,18 @@ export default function ProjectsShow() {
     setDifficultyFilter("all")
   }
 
+  // Handle tab change
+  const handleTabChange = (newTab) => {
+    router.visit(`${project.routes.project}?tab=${newTab}`, {
+      preserveState: true,
+      preserveScroll: true
+    })
+  }
+
   // Toggle cluster view
   const toggleView = () => {
     const newView = view === "representatives" ? "all" : "representatives"
-    router.visit(`${window.location.pathname}?view=${newView}`, {
+    router.visit(`${project.routes.project}?tab=keywords&view=${newView}`, {
       preserveState: true,
       preserveScroll: true
     })
@@ -318,7 +330,7 @@ export default function ProjectsShow() {
         )}
 
         {/* Keywords & Articles Tabs */}
-        <Tabs defaultValue="keywords" className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="border-2">
             <TabsTrigger value="keywords" className="flex items-center gap-2">
               <Key className="h-4 w-4" />
