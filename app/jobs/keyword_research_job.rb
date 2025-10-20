@@ -82,6 +82,19 @@ class KeywordResearchJob < ApplicationJob
     broadcast_progress("💾 Saving top keywords with filters...")
     service.send(:save_keywords)
 
+    # Step 9: Cluster similar keywords
+    keyword_count = @keyword_research.keywords.count
+    if keyword_count > 1
+      broadcast_progress("🔗 Clustering similar keywords...")
+      KeywordClusterAssignmentService.new(@keyword_research).perform
+      cluster_count = @keyword_research.keywords.cluster_representatives.count
+      if cluster_count > 0
+        broadcast_progress("✅ Created #{cluster_count} keyword clusters")
+      else
+        broadcast_progress("→ No clusters found (keywords are unique)", indent: 1)
+      end
+    end
+
     # Mark as completed
     @keyword_research.update!(
       status: :completed,
