@@ -39,19 +39,11 @@ class ProjectsController < ApplicationController
     # Get the latest keyword research
     @keyword_research = @project.keyword_researches.order(created_at: :desc).first
 
-    # Handle view parameter for cluster filtering
-    view = params[:view] || "representatives"
+    # Build clusters data with aggregated metrics
+    @clusters = build_clusters_data
 
-    # Filter keywords based on view
-    @keywords = if view == "all"
-      @project.keywords.by_opportunity.limit(50)
-    else
-      # Show cluster representatives + unclustered keywords (default)
-      @project.keywords
-        .where("is_cluster_representative = ? OR cluster_id IS NULL", true)
-        .by_opportunity
-        .limit(50)
-    end
+    # Load all keywords (for Keywords tab - clustering is optional view)
+    @keywords = @project.keywords.by_opportunity.limit(50)
 
     # Load articles
     @articles = @project.articles.order(created_at: :desc).limit(20)
@@ -59,13 +51,13 @@ class ProjectsController < ApplicationController
     render inertia: "App/Projects/Show", props: {
       project: project_props(@project).merge(routes: project_routes(@project)),
       keywordResearch: @keyword_research ? keyword_research_props(@keyword_research) : nil,
+      clusters: @clusters,
       keywords: @keywords.map { |k| keyword_props(k) },
       articles: @articles.map { |a| article_props(a) },
-      view: view,
       stats: {
         total_keywords: @project.keywords.count,
-        cluster_representatives: @project.keywords.cluster_representatives.count,
-        unclustered: @project.keywords.unclustered.count
+        clusters_count: @project.keywords.cluster_representatives.count,
+        unclustered_count: @project.keywords.unclustered.count
       }
     }
   end
@@ -244,5 +236,34 @@ class ProjectsController < ApplicationController
       created_at: article.created_at,
       article_url: article_path(article)
     }
+  end
+
+  def build_clusters_data
+    # Get all cluster representatives
+    representatives = @project.keywords.cluster_representatives
+
+    representatives.map do |rep|
+      # Get all members including the representative (cluster_members is a method, not association)
+      members = rep.cluster_members.order(volume: :desc, opportunity: :desc)
+
+      # Calculate aggregated metrics
+      total_volume = members.sum(:volume) || 0
+      avg_difficulty = members.average(:difficulty)&.round || 0
+      avg_opportunity = members.average(:opportunity)&.round || 0
+      has_estimated = members.any? { |m| m.volume.nil? || m.volume == 0 }
+
+      {
+        id: rep.cluster_id,
+        representative_keyword: rep.keyword,
+        representative_id: rep.id,
+        keywords_count: members.count,
+        total_volume: total_volume,
+        volume_estimated: has_estimated,
+        avg_difficulty: avg_difficulty,
+        avg_opportunity: avg_opportunity,
+        members: members.map { |m| keyword_props(m) },
+        new_article_url: new_keyword_article_path(rep.id)
+      }
+    end.sort_by { |c| -c[:avg_opportunity] } # Sort by average opportunity descending
   end
 end
