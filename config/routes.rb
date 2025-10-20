@@ -7,6 +7,10 @@ Rails.application.routes.draw do
   # Projects and Articles
   resources :projects do
     resources :articles, only: [ :create ]
+    member do
+      get :keywords
+      get :articles, action: :articles_tab
+    end
     collection do
       post :autofill
     end

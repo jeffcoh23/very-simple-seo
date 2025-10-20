@@ -95,6 +95,8 @@ def project_routes(project)
     update_project: project_path(project),
     delete_project: project_path(project),
     project: project_path(project),
+    keywords: keywords_project_path(project),
+    articles: articles_project_path(project),
     create_article: project_articles_path(project)
   }
 end
