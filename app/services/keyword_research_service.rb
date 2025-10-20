@@ -39,7 +39,10 @@ class KeywordResearchService
     # 8. Save top keywords to database (with filters)
     save_keywords
 
-    # 9. Mark research as completed
+    # 9. Cluster similar keywords to avoid duplicates
+    cluster_keywords
+
+    # 10. Mark research as completed
     @keyword_research.update!(
       status: :completed,
       total_keywords_found: @keywords.size,
@@ -595,5 +598,20 @@ class KeywordResearchService
       Rails.logger.error "Failed to parse AI competitor filter response: #{e.message}"
       candidates
     end
+  end
+
+  # Step 9: Cluster similar keywords to avoid duplicates
+  def cluster_keywords
+    return unless @keyword_research.keywords.any?
+
+    Rails.logger.info "Step 9: Clustering keywords..."
+
+    clustering_service = KeywordClusterAssignmentService.new(@keyword_research)
+    clustering_service.perform
+
+    Rails.logger.info "Clustering complete"
+  rescue => e
+    Rails.logger.error "Clustering failed: #{e.message}"
+    # Don't fail the whole research if clustering fails
   end
 end

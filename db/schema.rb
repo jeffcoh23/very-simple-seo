@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_18_190136) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_20_005726) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -79,6 +79,11 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_18_190136) do
     t.integer "generation_status", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "cluster_id"
+    t.boolean "is_cluster_representative", default: false
+    t.integer "cluster_size", default: 1
+    t.jsonb "cluster_keywords", default: []
+    t.index ["cluster_id"], name: "index_keywords_on_cluster_id"
     t.index ["generation_status"], name: "index_keywords_on_generation_status"
     t.index ["keyword_research_id"], name: "index_keywords_on_keyword_research_id"
     t.index ["opportunity"], name: "index_keywords_on_opportunity"
