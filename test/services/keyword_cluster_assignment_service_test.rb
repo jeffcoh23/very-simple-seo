@@ -55,7 +55,7 @@ class KeywordClusterAssignmentServiceTest < ActiveSupport::TestCase
     assert_equal 3, k1.cluster_size
 
     # Cluster keywords should be stored
-    assert_equal ["tools for seo", "seo tool"].sort, k1.cluster_keywords.sort
+    assert_equal [ "tools for seo", "seo tool" ].sort, k1.cluster_keywords.sort
   end
 
   test "does not cluster keywords with similarity < 0.85" do

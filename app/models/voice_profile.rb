@@ -12,7 +12,7 @@ class VoiceProfile < ApplicationRecord
 
   # Methods
   def to_prompt_instruction
-    parts = [description]
+    parts = [ description ]
     parts << "\n\nExample writing style:\n#{sample_text}" if sample_text.present?
     parts.join
   end

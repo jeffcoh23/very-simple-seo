@@ -140,7 +140,7 @@ class KeywordTest < ActiveSupport::TestCase
     member = @research.keywords.create!(keyword: "tools for seo", volume: 100, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: false)
     unclustered = @research.keywords.create!(keyword: "other keyword", volume: 100, difficulty: 50, opportunity: 75)
 
-    assert_equal [rep], @research.keywords.cluster_representatives.to_a
+    assert_equal [ rep ], @research.keywords.cluster_representatives.to_a
   end
 
   test "in_cluster scope returns keywords in specific cluster" do
@@ -148,14 +148,14 @@ class KeywordTest < ActiveSupport::TestCase
     k2 = @research.keywords.create!(keyword: "tools for seo", volume: 100, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: false)
     k3 = @research.keywords.create!(keyword: "other keyword", volume: 100, difficulty: 50, opportunity: 75, cluster_id: 2, is_cluster_representative: true)
 
-    assert_equal [k1, k2], @research.keywords.in_cluster(1).order(:id).to_a
+    assert_equal [ k1, k2 ], @research.keywords.in_cluster(1).order(:id).to_a
   end
 
   test "unclustered scope returns keywords without cluster_id" do
     clustered = @research.keywords.create!(keyword: "seo tools", volume: 1000, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: true)
     unclustered = @research.keywords.create!(keyword: "other keyword", volume: 100, difficulty: 50, opportunity: 75)
 
-    assert_equal [unclustered], @research.keywords.unclustered.to_a
+    assert_equal [ unclustered ], @research.keywords.unclustered.to_a
   end
 
   # Clustering - Helper methods

@@ -11,7 +11,7 @@ class CreateVoiceProfiles < ActiveRecord::Migration[8.0]
       t.timestamps
     end
 
-    add_index :voice_profiles, [:user_id, :is_default]
+    add_index :voice_profiles, [ :user_id, :is_default ]
     add_index :voice_profiles, :is_system
   end
 end

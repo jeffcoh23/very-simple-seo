@@ -78,7 +78,7 @@ class SettingsController < ApplicationController
       :first_name,
       :last_name,
       :email_address,
-      voice_profiles_attributes: [:id, :name, :description, :is_default, :_destroy]
+      voice_profiles_attributes: [ :id, :name, :description, :is_default, :_destroy ]
     )
   end
 

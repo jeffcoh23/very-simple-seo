@@ -44,7 +44,7 @@ class KeywordClusterAssignmentService
 
     # Start with each keyword in its own cluster
     # Store keyword objects, not just text
-    clusters = keywords.map { |kw_obj| { keywords: [kw_obj], text: kw_obj.keyword } }
+    clusters = keywords.map { |kw_obj| { keywords: [ kw_obj ], text: kw_obj.keyword } }
 
     # Merge similar clusters iteratively
     merged = true
