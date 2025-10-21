@@ -106,4 +106,122 @@ class UserTest < ActiveSupport::TestCase
       user.destroy
     end
   end
+
+  # Voice Profile Tests
+  test "should have many voice_profiles" do
+    user = create_test_user
+    voice1 = user.voice_profiles.create!(name: "Test Voice 1", description: "Test tone 1")
+    voice2 = user.voice_profiles.create!(name: "Test Voice 2", description: "Test tone 2")
+
+    # User gets 7 default voices + 2 created = 9 total
+    assert_equal 9, user.voice_profiles.count
+    assert_includes user.voice_profiles, voice1
+    assert_includes user.voice_profiles, voice2
+  end
+
+  test "should destroy associated voice_profiles when user is destroyed" do
+    user = create_test_user
+    user.voice_profiles.create!(name: "Test Voice", description: "Test description")
+
+    # User has 7 default voices + 1 created = 8 total
+    assert_difference "VoiceProfile.count", -8 do
+      user.destroy
+    end
+  end
+
+  test "should create default voice profiles after user creation" do
+    # Create a new user (not using the test helper which might skip callbacks)
+    user = User.create!(
+      email_address: "newuser@example.com",
+      password: "password123",
+      password_confirmation: "password123",
+      first_name: "New",
+      last_name: "User",
+      email_verified_at: Time.current
+    )
+
+    # Should have 7 default voice profiles
+    assert_equal 7, user.voice_profiles.count
+
+    # Check voice profile names
+    voice_names = user.voice_profiles.pluck(:name)
+    assert_includes voice_names, "Professional"
+    assert_includes voice_names, "Casual"
+    assert_includes voice_names, "Friendly"
+    assert_includes voice_names, "Formal"
+    assert_includes voice_names, "Technical"
+    assert_includes voice_names, "Conversational"
+    assert_includes voice_names, "Authoritative"
+  end
+
+  test "should have one default voice profile after creation" do
+    user = User.create!(
+      email_address: "newuser2@example.com",
+      password: "password123",
+      password_confirmation: "password123",
+      first_name: "New",
+      last_name: "User",
+      email_verified_at: Time.current
+    )
+
+    default_voices = user.voice_profiles.where(is_default: true)
+    assert_equal 1, default_voices.count
+    assert_equal "Professional", default_voices.first.name
+  end
+
+  test "default_voice returns the voice marked as default" do
+    user = create_test_user
+    voice1 = user.voice_profiles.create!(name: "Voice 1", description: "Desc 1", is_default: false)
+    voice2 = user.voice_profiles.create!(name: "Voice 2", description: "Desc 2", is_default: true)
+    voice3 = user.voice_profiles.create!(name: "Voice 3", description: "Desc 3", is_default: false)
+
+    assert_equal voice2, user.default_voice
+  end
+
+  test "default_voice returns first voice if none marked default" do
+    user = create_test_user
+    # Destroy all default voices to test fallback behavior
+    user.voice_profiles.destroy_all
+
+    voice1 = user.voice_profiles.create!(name: "AAA Voice", description: "AAA description", is_default: false)
+    voice2 = user.voice_profiles.create!(name: "BBB Voice", description: "BBB description", is_default: false)
+
+    # Neither is default, should return first
+    assert_equal voice1, user.default_voice
+  end
+
+  test "default_voice returns nil if user has no voices" do
+    user = create_test_user
+    # Clear all voice profiles
+    user.voice_profiles.destroy_all
+
+    assert_nil user.default_voice
+  end
+
+  test "should accept nested attributes for voice_profiles" do
+    user = create_test_user
+    voice = user.voice_profiles.create!(name: "Original Name", description: "Original description")
+
+    user.update!(
+      voice_profiles_attributes: [
+        { id: voice.id, name: "Updated Name" }
+      ]
+    )
+
+    voice.reload
+    assert_equal "Updated Name", voice.name
+  end
+
+  test "should allow destroying voice_profiles via nested attributes" do
+    user = create_test_user
+    voice = user.voice_profiles.create!(name: "To Delete", description: "To delete description")
+
+    assert_difference "VoiceProfile.count", -1 do
+      user.update!(
+        voice_profiles_attributes: [
+          { id: voice.id, _destroy: true }
+        ]
+      )
+    end
+  end
 end
