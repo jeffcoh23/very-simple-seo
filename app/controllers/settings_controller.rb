@@ -12,8 +12,7 @@ class SettingsController < ApplicationController
         plan: sub.name,
         on_grace_period: sub.on_grace_period?,
         ends_at: sub.ends_at
-      },
-      routes: settings_routes
+      }
     }
   end
 
@@ -108,13 +107,6 @@ class SettingsController < ApplicationController
       description: voice.description,
       sample_text: voice.sample_text,
       is_default: voice.is_default
-    }
-  end
-
-  def settings_routes
-    {
-      settings: settings_path,
-      update_settings: settings_path  # Same path, PATCH method
     }
   end
 end

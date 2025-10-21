@@ -31,17 +31,23 @@ export default function Settings({ user, voice_profiles, subscription }) {
 
   const onProfileSubmit = (e) => {
     e.preventDefault();
-    patchProfile(routes.update_settings);
+    patchProfile(routes.update_settings, {
+      preserveScroll: true
+    });
   };
 
   const onPasswordSubmit = (e) => {
     e.preventDefault();
-    patchPassword(routes.update_settings);
+    patchPassword(routes.update_settings, {
+      preserveScroll: true
+    });
   };
 
   const handleSetDefault = (voiceId) => {
     router.patch(routes.update_settings, {
       default_voice_id: voiceId
+    }, {
+      preserveScroll: true
     });
   };
 
@@ -55,6 +61,8 @@ export default function Settings({ user, voice_profiles, subscription }) {
           _destroy: true
         }]
       }
+    }, {
+      preserveScroll: true
     });
   };
 
@@ -72,6 +80,7 @@ export default function Settings({ user, voice_profiles, subscription }) {
         }]
       }
     }, {
+      preserveScroll: true,
       onSuccess: () => setNewVoice({ name: "", description: "" })
     });
   };
@@ -91,6 +100,7 @@ export default function Settings({ user, voice_profiles, subscription }) {
         }]
       }
     }, {
+      preserveScroll: true,
       onSuccess: () => setEditingVoice(null)
     });
   };
