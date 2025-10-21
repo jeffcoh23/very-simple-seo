@@ -1522,6 +1522,348 @@ end
 
 ---
 
+## Phase 12: Keyword Research Enhancements (Days 33-36)
+
+### 12.1 Expand Keyword Discovery
+
+**Goal:** Get more keywords beyond initial 30 using multiple strategies
+
+**Strategy A: Save More Keywords Initially**
+- Change limit from top 30 → save top 100-200 keywords
+- Add pagination to keyword table (show 30 per page)
+- Add filtering: by difficulty, volume, opportunity, intent
+- Add sorting: by any column
+
+**Strategy B: Competitive Keyword Extraction (NEW)**
+- After initial keyword research completes:
+  1. Take top 20 keywords found
+  2. Use Google Custom Search API to get top 10 ranking pages for each keyword
+  3. Scrape those pages to extract keywords they're targeting
+  4. Analyze their meta keywords, H1/H2 tags, content focus
+  5. Calculate metrics for newly discovered keywords
+  6. Save unique keywords (deduplicate)
+
+**Strategy C: Expand Research Feature**
+- "Find More Keywords" button on project page
+- Uses existing keywords as seeds for new research
+- Runs another research cycle with different angles:
+  - Question-based variations ("how to...", "what is...", "why...")
+  - Long-tail expansions (3-5 word phrases)
+  - Related topics from existing keywords
+- Costs 1 additional research credit
+
+**Strategy D: Manual Seed Keywords**
+- "Add Seed Keywords" input on project page
+- Users paste their own seed keywords (comma-separated)
+- Re-run research with user seeds + AI seeds
+- Merge results with existing keywords
+
+### 12.2 Create Competitive Keyword Scraper Service
+
+**`app/services/competitive_keyword_scraper_service.rb`:**
+
+```ruby
+class CompetitiveKeywordScraperService
+  def initialize(keywords)
+    @keywords = keywords.take(20) # Top 20 keywords
+    @discovered_keywords = []
+  end
+
+  def perform
+    @keywords.each do |keyword|
+      # Get top 10 ranking pages for this keyword
+      search_results = google_search(keyword.keyword)
+
+      search_results.each do |result|
+        # Scrape each page
+        page_keywords = scrape_page_for_keywords(result.url)
+        @discovered_keywords.concat(page_keywords)
+      end
+
+      sleep(1) # Rate limiting
+    end
+
+    # Deduplicate and calculate metrics
+    unique_keywords = deduplicate(@discovered_keywords)
+    add_metrics(unique_keywords)
+
+    unique_keywords
+  end
+
+  private
+
+  def google_search(keyword)
+    # Use Google Custom Search API (already configured)
+    # Returns top 10 results with URLs
+  end
+
+  def scrape_page_for_keywords(url)
+    # Scrape page content
+    # Extract:
+    # - Meta keywords
+    # - Title tag keywords
+    # - H1, H2, H3 headings
+    # - Frequently used phrases (2-4 words)
+    # - Internal link anchor text
+  end
+
+  def deduplicate(keywords)
+    # Remove duplicates
+    # Remove keywords we already have
+    # Return unique list
+  end
+
+  def add_metrics(keywords)
+    # Run through KeywordMetricsService
+    # Calculate volume, difficulty, opportunity for each
+  end
+end
+```
+
+**Key Features:**
+- Analyzes top-ranking competitor content
+- Extracts semantic keywords competitors are using
+- Finds gaps: keywords competitors rank for but you don't have
+- Automatic deduplication
+- Full metrics calculation
+
+### 12.3 Add "Expand Research" Job
+
+**`app/jobs/expand_keyword_research_job.rb`:**
+
+```ruby
+class ExpandKeywordResearchJob < ApplicationJob
+  queue_as :default
+
+  def perform(keyword_research_id)
+    research = KeywordResearch.find(keyword_research_id)
+    research.update!(status: :processing)
+
+    # Strategy 1: Competitive scraping
+    existing_keywords = research.keywords.order(opportunity: :desc).limit(20)
+    competitive_keywords = CompetitiveKeywordScraperService.new(existing_keywords).perform
+
+    # Strategy 2: Question variations
+    question_keywords = QuestionVariationService.new(existing_keywords).perform
+
+    # Strategy 3: Long-tail expansions
+    longtail_keywords = LongTailExpansionService.new(existing_keywords).perform
+
+    # Merge all new keywords
+    all_new_keywords = competitive_keywords + question_keywords + longtail_keywords
+
+    # Save to database (deduplicate first)
+    save_keywords(research, all_new_keywords)
+
+    research.update!(
+      status: :completed,
+      total_keywords_found: research.keywords.count,
+      completed_at: Time.current
+    )
+  rescue => e
+    research.update!(
+      status: :failed,
+      error_message: e.message,
+      completed_at: Time.current
+    )
+  end
+end
+```
+
+### 12.4 Update Keyword Table UI
+
+**Add to `app/frontend/components/app/KeywordTable.jsx`:**
+
+```jsx
+// Pagination
+const [currentPage, setCurrentPage] = useState(1)
+const keywordsPerPage = 30
+
+// Filters
+const [filters, setFilters] = useState({
+  difficulty: 'all', // all, easy, medium, hard
+  intent: 'all',     // all, informational, commercial, etc.
+  minVolume: 0,
+  minOpportunity: 0
+})
+
+// Sorting
+const [sortBy, setSortBy] = useState('opportunity')
+const [sortDir, setSortDir] = useState('desc')
+
+// "Find More Keywords" button
+<Button
+  onClick={() => router.post(routes.expand_research, { id: research.id })}
+  disabled={isExpanding}
+>
+  <Plus className="mr-2 h-4 w-4" />
+  {isExpanding ? "Finding Keywords..." : "Find 100+ More Keywords"}
+</Button>
+```
+
+### 12.5 Display Keyword Clusters on Article Page
+
+**Goal:** Show which keywords are grouped with the target keyword
+
+**Update Article model:**
+```ruby
+# article.rb
+belongs_to :keyword
+has_one :keyword_cluster, through: :keyword
+
+def cluster_keywords
+  keyword.cluster&.keywords || [keyword]
+end
+
+def cluster_stats
+  keywords = cluster_keywords
+  {
+    total_volume: keywords.sum(:volume),
+    avg_difficulty: keywords.average(:difficulty).to_i,
+    avg_opportunity: keywords.average(:opportunity).to_i,
+    keyword_count: keywords.count
+  }
+end
+```
+
+**Update Articles Controller:**
+```ruby
+def show
+  @article = current_user.articles.find(params[:id])
+
+  render inertia: "App/Articles/Show", props: {
+    article: article_props(@article),
+    project: project_props(@article.project),
+    keyword: keyword_props(@article.keyword),
+    cluster_keywords: @article.cluster_keywords.map { |k| keyword_props(k) },
+    cluster_stats: @article.cluster_stats
+  }
+end
+```
+
+**Update `app/frontend/pages/App/Articles/Show.jsx`:**
+
+Add new sidebar card after Keyword Info:
+
+```jsx
+{/* Keyword Cluster */}
+{cluster_keywords && cluster_keywords.length > 1 && (
+  <Card className="border-2">
+    <CardHeader>
+      <CardTitle className="text-lg">Keyword Cluster</CardTitle>
+      <CardDescription>
+        This article targets {cluster_keywords.length} related keywords
+      </CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      {/* Aggregate Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <div className="text-xs text-muted-foreground">Total Volume</div>
+          <div className="text-lg font-semibold">{cluster_stats.total_volume.toLocaleString()}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Avg Difficulty</div>
+          <div className="text-lg font-semibold">{cluster_stats.avg_difficulty}</div>
+        </div>
+      </div>
+
+      {/* Individual Keywords */}
+      <div className="space-y-2">
+        <div className="text-sm font-medium">Keywords in Cluster:</div>
+        {cluster_keywords.map((kw, index) => (
+          <div key={index} className="border rounded-lg p-2 bg-muted/30">
+            <div className="font-mono text-sm font-medium">{kw.keyword}</div>
+            <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+              <span>Vol: {kw.volume?.toLocaleString()}</span>
+              <span>Diff: {kw.difficulty}</span>
+              <span>Opp: {kw.opportunity}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </CardContent>
+  </Card>
+)}
+```
+
+### 12.6 Add Routes & Controllers
+
+```ruby
+# config/routes.rb
+resources :projects do
+  resources :keyword_researches, only: [] do
+    member do
+      post :expand # Expand research with more keywords
+    end
+  end
+end
+```
+
+```ruby
+# app/controllers/keyword_researches_controller.rb
+def expand
+  @research = current_user.projects.find(params[:project_id])
+                         .keyword_researches.find(params[:id])
+
+  # Check credits
+  unless current_user.has_credits?
+    redirect_to pricing_path, alert: "Upgrade to expand keyword research"
+    return
+  end
+
+  # Deduct credit
+  current_user.decrement!(:credits)
+
+  # Enqueue job
+  ExpandKeywordResearchJob.perform_later(@research.id)
+
+  redirect_to project_path(@research.project),
+              notice: "Finding more keywords... This will take 1-2 minutes."
+end
+```
+
+### 12.7 Cost Estimates
+
+**Competitive scraping (20 keywords × 10 pages each):**
+- Google Search API: Free (100 queries/day)
+- Page scraping: No cost (public data)
+- Keyword metrics calculation: Heuristic (free) or Google Ads API ($0)
+- Total cost: **Free** (uses existing APIs)
+
+**Expand research:**
+- Additional AI calls for variations: ~$0.05
+- Additional scraping: Free
+- Total cost per expansion: **~$0.05**
+
+**Credits:**
+- Competitive scraping: Included with initial research (runs automatically)
+- Expand research: Costs 1 credit
+
+### 12.8 Testing
+
+**Test scenarios:**
+- Initial research finds 30 keywords
+- Competitive scraper discovers 50+ more from top-ranking pages
+- "Expand Research" finds 100+ additional variations
+- Pagination works with 200+ keywords
+- Filters work correctly
+- Article page shows cluster keywords
+- Cluster stats calculate correctly
+
+**Acceptance:**
+- ✅ Initial research saves 100-200 keywords (not just 30)
+- ✅ Competitive scraper extracts keywords from top-ranking pages
+- ✅ "Find More Keywords" button expands research
+- ✅ Pagination shows 30 keywords per page
+- ✅ Filters work (difficulty, volume, intent)
+- ✅ Article page displays keyword cluster
+- ✅ Cluster shows individual keyword stats
+- ✅ Cluster shows aggregate stats (total volume, avg difficulty)
+- ✅ All features work within credit limits
+
+---
+
 ## Success Metrics (First 30 Days)
 
 - **Signups:** 50 total users
