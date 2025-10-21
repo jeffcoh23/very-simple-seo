@@ -121,8 +121,8 @@ class ArticleGenerationService
     Rails.logger.info "\n[2/4] Generating Outline"
     Rails.logger.info "-" * 40
 
-    voice_profile = @article.project.respond_to?(:voice_profile) ? @article.project.voice_profile : nil
-    service = ArticleOutlineService.new(@keyword.keyword, serp_data, voice_profile: voice_profile, project: @project)
+    voice_profile_description = @article.voice_profile&.description
+    service = ArticleOutlineService.new(@keyword.keyword, serp_data, voice_profile: voice_profile_description, project: @project)
     service.perform
   end
 
@@ -130,8 +130,8 @@ class ArticleGenerationService
     Rails.logger.info "\n[3/4] Writing Article"
     Rails.logger.info "-" * 40
 
-    voice_profile = @article.project.respond_to?(:voice_profile) ? @article.project.voice_profile : nil
-    service = ArticleWriterService.new(@keyword.keyword, outline, serp_data, voice_profile: voice_profile, project: @project)
+    voice_profile_description = @article.voice_profile&.description
+    service = ArticleWriterService.new(@keyword.keyword, outline, serp_data, voice_profile: voice_profile_description, project: @project)
     service.perform
   end
 

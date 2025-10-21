@@ -84,4 +84,31 @@ class ArticleTest < ActiveSupport::TestCase
     assert article.pending?
     assert_nil article.error_message
   end
+
+  # Voice Profile Association
+  test "should belong to voice_profile optionally" do
+    voice = @user.voice_profiles.create!(name: "Test Voice", description: "Test description")
+    article = @project.articles.create!(keyword: @keyword, status: :pending, voice_profile: voice)
+
+    assert_equal voice, article.voice_profile
+  end
+
+  test "can create article without voice_profile" do
+    article = @project.articles.create!(keyword: @keyword, status: :pending)
+
+    assert_nil article.voice_profile
+    assert article.persisted?
+  end
+
+  test "voice_profile is nullified when voice profile is destroyed" do
+    voice = @user.voice_profiles.create!(name: "Test Voice", description: "Test description")
+    article = @project.articles.create!(keyword: @keyword, status: :pending, voice_profile: voice)
+
+    assert_equal voice, article.voice_profile
+
+    voice.destroy
+    article.reload
+
+    assert_nil article.voice_profile
+  end
 end

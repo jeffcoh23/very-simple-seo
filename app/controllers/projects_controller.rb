@@ -38,14 +38,27 @@ class ProjectsController < ApplicationController
   def show
     # Get the latest keyword research
     @keyword_research = @project.keyword_researches.order(created_at: :desc).first
+
+    # Build clusters data with aggregated metrics
+    @clusters = build_clusters_data
+
+    # Load all keywords (for Keywords tab - clustering is optional view)
     @keywords = @project.keywords.by_opportunity.limit(50)
+
+    # Load articles
     @articles = @project.articles.order(created_at: :desc).limit(20)
 
     render inertia: "App/Projects/Show", props: {
       project: project_props(@project).merge(routes: project_routes(@project)),
       keywordResearch: @keyword_research ? keyword_research_props(@keyword_research) : nil,
+      clusters: @clusters,
       keywords: @keywords.map { |k| keyword_props(k) },
-      articles: @articles.map { |a| article_props(a) }
+      articles: @articles.map { |a| article_props(a) },
+      stats: {
+        total_keywords: @project.keywords.count,
+        clusters_count: @project.keywords.cluster_representatives.count,
+        unclustered_count: @project.keywords.unclustered.count
+      }
     }
   end
 
@@ -177,7 +190,7 @@ class ProjectsController < ApplicationController
   end
 
   def keyword_props(keyword)
-    {
+    props = {
       id: keyword.id,
       keyword: keyword.keyword,
       volume: keyword.volume,
@@ -192,6 +205,25 @@ class ProjectsController < ApplicationController
       article_url: keyword.article.present? ? article_path(keyword.article) : nil,
       new_article_url: new_keyword_article_path(keyword.id)
     }
+
+    # Add cluster information if keyword is clustered
+    if keyword.clustered?
+      props.merge!(
+        cluster_id: keyword.cluster_id,
+        is_cluster_representative: keyword.is_cluster_representative,
+        cluster_size: keyword.cluster_size,
+        cluster_keywords: keyword.cluster_keywords || []
+      )
+    else
+      props.merge!(
+        cluster_id: nil,
+        is_cluster_representative: false,
+        cluster_size: 1,
+        cluster_keywords: []
+      )
+    end
+
+    props
   end
 
   def article_props(article)
@@ -204,5 +236,34 @@ class ProjectsController < ApplicationController
       created_at: article.created_at,
       article_url: article_path(article)
     }
+  end
+
+  def build_clusters_data
+    # Get all cluster representatives
+    representatives = @project.keywords.cluster_representatives
+
+    representatives.map do |rep|
+      # Get all members including the representative (cluster_members is a method, not association)
+      members = rep.cluster_members.order(volume: :desc, opportunity: :desc)
+
+      # Calculate aggregated metrics
+      total_volume = members.sum(:volume) || 0
+      avg_difficulty = members.average(:difficulty)&.round || 0
+      avg_opportunity = members.average(:opportunity)&.round || 0
+      has_estimated = members.any? { |m| m.volume.nil? || m.volume == 0 }
+
+      {
+        id: rep.cluster_id,
+        representative_keyword: rep.keyword,
+        representative_id: rep.id,
+        keywords_count: members.count,
+        total_volume: total_volume,
+        volume_estimated: has_estimated,
+        avg_difficulty: avg_difficulty,
+        avg_opportunity: avg_opportunity,
+        members: members.map { |m| keyword_props(m) },
+        new_article_url: new_keyword_article_path(rep.id)
+      }
+    end.sort_by { |c| -c[:avg_opportunity] } # Sort by average opportunity descending
   end
 end

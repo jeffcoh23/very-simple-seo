@@ -7,3 +7,6 @@
 #   ["Action", "Comedy", "Drama", "Horror"].each do |genre_name|
 #     MovieGenre.find_or_create_by!(name: genre_name)
 #   end
+
+# Voice profiles are auto-created for each user via User#create_default_voice_profiles callback
+# See config/voice_profiles.yml for the default voice profile definitions

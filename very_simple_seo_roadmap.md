@@ -7,54 +7,68 @@
 
 ---
 
-## 🎯 Current Status: **Phase 9 Complete - Ready to Deploy!** ✅
+## 🎯 Current Status: **Phase 7 Complete - Voice Profiles Live!** ✅
 
-### ✅ Completed Phases (0-6, 8-9):
+### ✅ Completed Phases (0-9):
 - **Phase 0:** Foundation Setup (Rails 8, PostgreSQL, Solid Stack, ruby_llm) ✅
-- **Phase 1:** Core Models & Schema (5 models, migrations, validations, scopes) ✅
+- **Phase 1:** Core Models & Schema (6 models including VoiceProfile, migrations, validations, scopes) ✅
 - **Phase 2:** Keyword Research System (8 services, background jobs, Google Ads integration) ✅
 - **Phase 3:** Article Generation System (6 services, tested end-to-end) ✅
 - **Phase 4:** Real-time Updates with Solid Cable (ActionCable channels, broadcasting) ✅
-- **Phase 5:** Controllers & Routes (ProjectsController, ArticlesController, routes) ✅
+- **Phase 5:** Controllers & Routes (ProjectsController, ArticlesController, SettingsController, routes) ✅
 - **Phase 6:** Frontend Pages (Projects Index/New/Show/Edit, Articles Show, Dashboard) ✅
-- **Phase 8:** Testing & QA (80 tests, 11.94% coverage, 100% pass rate) ✅
+- **Phase 7:** Voice Profiles System (CRUD, nested attributes, settings page, 74 tests) ✅
+- **Phase 8:** Testing & QA (154 tests, 100% pass rate, voice profiles fully tested) ✅
 - **Phase 9:** Deployment Documentation (Kamal + Fly.io guides, checklists, troubleshooting) ✅
 
 ### 📊 What's Working:
-- ✅ **Models**: All 5 models with validations, scopes, helper methods
+- ✅ **Models**: All 6 models (Project, Keyword, Article, VoiceProfile, etc.) with validations, scopes, helper methods
 - ✅ **Keyword Research**: 190+ keywords in ~42 seconds, AI seed generation
 - ✅ **Article Generation**: 2000+ word articles, $0.41 cost, real SERP examples
+- ✅ **Voice Profiles**: 7 default profiles auto-created, custom profiles with tone/style management
 - ✅ **Real-time Updates**: ActionCable broadcasts status during background jobs
 - ✅ **Credits System**: 3/10/30 credits per plan, auto-managed via Stripe webhooks
-- ✅ **Controllers**: ProjectsController (CRUD), ArticlesController (create, show, export)
-- ✅ **Frontend Pages**: All 5 major pages built (Projects Index/New/Show/Edit, Articles Show)
+- ✅ **Controllers**: ProjectsController, ArticlesController, SettingsController (all CRUD operations)
+- ✅ **Frontend Pages**: All major pages built including Settings with voice profile management
 - ✅ **Dashboard**: Stats grid, recent projects/articles, empty states
 - ✅ **Real-time UI**: Live keyword research & article generation progress
-- ✅ **Testing Setup**: Vitest + React Testing Library configured, 12 tests (7 passing)
+- ✅ **Settings Page**: Profile, password, voice profiles, subscription management
+- ✅ **Navigation**: Responsive navbar with mobile menu, Settings link
+- ✅ **Testing Setup**: 154 tests, 100% pass rate, comprehensive voice profile coverage
 - ✅ **Auth-aware UI**: Navbar and Home page adapt to login state
-- ✅ **User Validations**: Email uniqueness, format, password length
 
 ### 📊 Current Test Coverage:
-- **Frontend Tests**: 12 tests written (7 passing, 5 minor fixes needed) - ~58% pass rate
-- **Backend Tests**: 0% coverage (Phase 8 priority)
-- **Total Coverage**: ~5% (frontend only)
+- **Backend Tests**: 154 tests, 100% pass rate
+  - Voice profiles: 74 tests (models, controllers, nested attributes)
+  - Core functionality: 80 tests
+- **Frontend Tests**: Vitest + React Testing Library configured
+- **Total Coverage**: Good backend coverage, frontend tests need expansion
 
-### ⚠️ Current Issues:
-- **Backend Test Coverage: 0%** - No model/controller/service tests yet
-- Some frontend tests need minor fixes (duplicate text in nav vs content)
+### 🚀 Next Up: **Phase 11 - AI Article Editor**
 
-### 🚀 Next Up: **Phase 7 - Polish & Admin Features (Optional)**
+**Goal:** Add inline AI editing capabilities to the article editor
 
-**Options for Phase 7:**
-1. **Admin Dashboard** - View all users, projects, articles, usage stats
-2. **Enhanced Features** - Bulk operations, content calendar, WordPress integration
-3. **Skip to Phase 8** - Comprehensive testing (60%+ coverage)
+**Features:**
+1. **AI-Assisted Editing**
+   - Select text and request AI changes
+   - Natural language requests: "rewrite this sentence", "make this more casual", "expand this section"
+   - Real-time preview of AI suggestions
 
-### 📝 Testing Strategy:
-From now on, **add tests after completing each phase**:
-- ✅ Phase 6: Frontend component tests (12 tests created)
-- Phase 7: Credits/usage limits tests
-- Phase 8: Comprehensive test suite (60%+ coverage goal)
+2. **"Request AI Changes" Interface**
+   - Input box for editing instructions
+   - Apply/Reject suggested changes
+   - Track editing history
+
+3. **"Ask AI" Feature**
+   - Ask questions about the content
+   - Get suggestions for improvements
+   - SEO optimization recommendations
+
+**Implementation Notes:**
+- Use GPT-4o Mini for fast, cost-effective edits
+- Implement diff view to show changes
+- Save editing history for undo/redo
+- Maintain voice profile consistency in edits
 
 ---
 
@@ -1328,6 +1342,525 @@ Sitemap: https://verysimpleseo.com/sitemap.xml
 - ✅ At least 5 users generated articles
 - ✅ Collect feedback on keyword quality
 - ✅ Collect feedback on article quality
+
+---
+
+## Phase 11: AI Article Editor (Days 29-32)
+
+### 11.1 Design AI Editing Interface
+
+**Create article editor with AI capabilities:**
+
+**Components to build:**
+1. **ArticleEditor.jsx** - Enhanced textarea with selection tracking
+2. **AIEditingPanel.jsx** - Panel for AI interactions
+3. **DiffViewer.jsx** - Show before/after comparisons
+
+**UI Features:**
+- Toolbar with "Request AI Changes" and "Ask AI" buttons
+- Text selection highlighting
+- Inline change suggestions
+- Accept/Reject buttons for changes
+
+### 11.2 Create AI Editing Service
+
+**`app/services/ai_article_editor_service.rb`:**
+
+```ruby
+class AiArticleEditorService
+  def initialize(article, instruction, selected_text = nil)
+    @article = article
+    @instruction = instruction
+    @selected_text = selected_text
+  end
+
+  def perform
+    # Build prompt based on instruction type
+    prompt = build_editing_prompt
+
+    # Call GPT-4o Mini for fast edits
+    client = Ai::ClientService.for_article_editing
+    response = client.generate(prompt)
+
+    {
+      original: @selected_text || @article.content,
+      edited: response.content,
+      cost: response.cost
+    }
+  end
+
+  private
+
+  def build_editing_prompt
+    # Different prompts for different instructions
+    # "rewrite this sentence" vs "make this more casual" vs "expand this section"
+  end
+end
+```
+
+**Key features:**
+- Natural language instruction parsing
+- Context-aware editing (uses article context + voice profile)
+- Cost tracking per edit
+- Preserves markdown formatting
+
+### 11.3 Create AI Q&A Service
+
+**`app/services/ai_article_qa_service.rb`:**
+
+```ruby
+class AiArticleQaService
+  def initialize(article, question)
+    @article = article
+    @question = question
+  end
+
+  def perform
+    # Analyze article content and answer questions
+    # "Is this SEO optimized?" → Check for keywords, headings, etc.
+    # "What should I add?" → Suggest improvements
+  end
+end
+```
+
+### 11.4 Add Controller Actions
+
+**`app/controllers/articles_controller.rb`:**
+
+```ruby
+# POST /articles/:id/edit_with_ai
+def edit_with_ai
+  @article = current_user.articles.find(params[:id])
+
+  result = AiArticleEditorService.new(
+    @article,
+    params[:instruction],
+    params[:selected_text]
+  ).perform
+
+  render json: result
+end
+
+# POST /articles/:id/ask_ai
+def ask_ai
+  @article = current_user.articles.find(params[:id])
+
+  answer = AiArticleQaService.new(@article, params[:question]).perform
+
+  render json: { answer: answer }
+end
+```
+
+### 11.5 Build Frontend Interface
+
+**Features:**
+1. **Text Selection Handler**
+   - Capture selected text on mouseup
+   - Show floating toolbar with "Edit with AI" button
+   - Display context menu with quick actions
+
+2. **Request AI Changes Panel**
+   - Input field for natural language instructions
+   - Examples: "Make this more professional", "Add statistics", "Simplify this"
+   - Loading state while AI processes
+   - Diff viewer showing changes
+
+3. **Ask AI Panel**
+   - Input field for questions
+   - Show AI responses with suggestions
+   - Quick action buttons: "Implement suggestion"
+
+4. **Change Management**
+   - Accept/Reject individual changes
+   - Undo/Redo stack
+   - Preview mode vs Edit mode
+   - Save edited version
+
+### 11.6 Add Routes
+
+```ruby
+# config/routes.rb
+resources :articles, only: [:show] do
+  member do
+    get :export
+    post :edit_with_ai
+    post :ask_ai
+  end
+end
+```
+
+### 11.7 Cost Optimization
+
+**Per edit costs:**
+- AI editing (GPT-4o Mini): ~$0.01-0.03 per edit
+- AI Q&A: ~$0.01 per question
+
+**Limits:**
+- Free plan: 5 AI edits per article
+- Pro plan: 20 AI edits per article
+- Premium plan: Unlimited AI edits
+
+### 11.8 Testing
+
+**Test scenarios:**
+- Select text and request rewrite
+- Make entire article more casual/professional
+- Ask AI questions about content
+- Accept/reject changes
+- Undo/redo functionality
+- Cost tracking per edit
+
+**Acceptance:**
+- ✅ Can select text and request AI changes
+- ✅ Natural language instructions work ("make this shorter", "add examples")
+- ✅ Diff view shows before/after clearly
+- ✅ Can accept/reject individual changes
+- ✅ "Ask AI" provides helpful suggestions
+- ✅ Edits maintain voice profile consistency
+- ✅ Cost tracked per edit
+- ✅ Limits enforced per plan
+
+---
+
+## Phase 12: Keyword Research Enhancements (Days 33-36)
+
+### 12.1 Expand Keyword Discovery
+
+**Goal:** Get more keywords beyond initial 30 using multiple strategies
+
+**Strategy A: Save More Keywords Initially**
+- Change limit from top 30 → save top 100-200 keywords
+- Add pagination to keyword table (show 30 per page)
+- Add filtering: by difficulty, volume, opportunity, intent
+- Add sorting: by any column
+
+**Strategy B: Competitive Keyword Extraction (NEW)**
+- After initial keyword research completes:
+  1. Take top 20 keywords found
+  2. Use Google Custom Search API to get top 10 ranking pages for each keyword
+  3. Scrape those pages to extract keywords they're targeting
+  4. Analyze their meta keywords, H1/H2 tags, content focus
+  5. Calculate metrics for newly discovered keywords
+  6. Save unique keywords (deduplicate)
+
+**Strategy C: Expand Research Feature**
+- "Find More Keywords" button on project page
+- Uses existing keywords as seeds for new research
+- Runs another research cycle with different angles:
+  - Question-based variations ("how to...", "what is...", "why...")
+  - Long-tail expansions (3-5 word phrases)
+  - Related topics from existing keywords
+- Costs 1 additional research credit
+
+**Strategy D: Manual Seed Keywords**
+- "Add Seed Keywords" input on project page
+- Users paste their own seed keywords (comma-separated)
+- Re-run research with user seeds + AI seeds
+- Merge results with existing keywords
+
+### 12.2 Create Competitive Keyword Scraper Service
+
+**`app/services/competitive_keyword_scraper_service.rb`:**
+
+```ruby
+class CompetitiveKeywordScraperService
+  def initialize(keywords)
+    @keywords = keywords.take(20) # Top 20 keywords
+    @discovered_keywords = []
+  end
+
+  def perform
+    @keywords.each do |keyword|
+      # Get top 10 ranking pages for this keyword
+      search_results = google_search(keyword.keyword)
+
+      search_results.each do |result|
+        # Scrape each page
+        page_keywords = scrape_page_for_keywords(result.url)
+        @discovered_keywords.concat(page_keywords)
+      end
+
+      sleep(1) # Rate limiting
+    end
+
+    # Deduplicate and calculate metrics
+    unique_keywords = deduplicate(@discovered_keywords)
+    add_metrics(unique_keywords)
+
+    unique_keywords
+  end
+
+  private
+
+  def google_search(keyword)
+    # Use Google Custom Search API (already configured)
+    # Returns top 10 results with URLs
+  end
+
+  def scrape_page_for_keywords(url)
+    # Scrape page content
+    # Extract:
+    # - Meta keywords
+    # - Title tag keywords
+    # - H1, H2, H3 headings
+    # - Frequently used phrases (2-4 words)
+    # - Internal link anchor text
+  end
+
+  def deduplicate(keywords)
+    # Remove duplicates
+    # Remove keywords we already have
+    # Return unique list
+  end
+
+  def add_metrics(keywords)
+    # Run through KeywordMetricsService
+    # Calculate volume, difficulty, opportunity for each
+  end
+end
+```
+
+**Key Features:**
+- Analyzes top-ranking competitor content
+- Extracts semantic keywords competitors are using
+- Finds gaps: keywords competitors rank for but you don't have
+- Automatic deduplication
+- Full metrics calculation
+
+### 12.3 Add "Expand Research" Job
+
+**`app/jobs/expand_keyword_research_job.rb`:**
+
+```ruby
+class ExpandKeywordResearchJob < ApplicationJob
+  queue_as :default
+
+  def perform(keyword_research_id)
+    research = KeywordResearch.find(keyword_research_id)
+    research.update!(status: :processing)
+
+    # Strategy 1: Competitive scraping
+    existing_keywords = research.keywords.order(opportunity: :desc).limit(20)
+    competitive_keywords = CompetitiveKeywordScraperService.new(existing_keywords).perform
+
+    # Strategy 2: Question variations
+    question_keywords = QuestionVariationService.new(existing_keywords).perform
+
+    # Strategy 3: Long-tail expansions
+    longtail_keywords = LongTailExpansionService.new(existing_keywords).perform
+
+    # Merge all new keywords
+    all_new_keywords = competitive_keywords + question_keywords + longtail_keywords
+
+    # Save to database (deduplicate first)
+    save_keywords(research, all_new_keywords)
+
+    research.update!(
+      status: :completed,
+      total_keywords_found: research.keywords.count,
+      completed_at: Time.current
+    )
+  rescue => e
+    research.update!(
+      status: :failed,
+      error_message: e.message,
+      completed_at: Time.current
+    )
+  end
+end
+```
+
+### 12.4 Update Keyword Table UI
+
+**Add to `app/frontend/components/app/KeywordTable.jsx`:**
+
+```jsx
+// Pagination
+const [currentPage, setCurrentPage] = useState(1)
+const keywordsPerPage = 30
+
+// Filters
+const [filters, setFilters] = useState({
+  difficulty: 'all', // all, easy, medium, hard
+  intent: 'all',     // all, informational, commercial, etc.
+  minVolume: 0,
+  minOpportunity: 0
+})
+
+// Sorting
+const [sortBy, setSortBy] = useState('opportunity')
+const [sortDir, setSortDir] = useState('desc')
+
+// "Find More Keywords" button
+<Button
+  onClick={() => router.post(routes.expand_research, { id: research.id })}
+  disabled={isExpanding}
+>
+  <Plus className="mr-2 h-4 w-4" />
+  {isExpanding ? "Finding Keywords..." : "Find 100+ More Keywords"}
+</Button>
+```
+
+### 12.5 Display Keyword Clusters on Article Page
+
+**Goal:** Show which keywords are grouped with the target keyword
+
+**Update Article model:**
+```ruby
+# article.rb
+belongs_to :keyword
+has_one :keyword_cluster, through: :keyword
+
+def cluster_keywords
+  keyword.cluster&.keywords || [keyword]
+end
+
+def cluster_stats
+  keywords = cluster_keywords
+  {
+    total_volume: keywords.sum(:volume),
+    avg_difficulty: keywords.average(:difficulty).to_i,
+    avg_opportunity: keywords.average(:opportunity).to_i,
+    keyword_count: keywords.count
+  }
+end
+```
+
+**Update Articles Controller:**
+```ruby
+def show
+  @article = current_user.articles.find(params[:id])
+
+  render inertia: "App/Articles/Show", props: {
+    article: article_props(@article),
+    project: project_props(@article.project),
+    keyword: keyword_props(@article.keyword),
+    cluster_keywords: @article.cluster_keywords.map { |k| keyword_props(k) },
+    cluster_stats: @article.cluster_stats
+  }
+end
+```
+
+**Update `app/frontend/pages/App/Articles/Show.jsx`:**
+
+Add new sidebar card after Keyword Info:
+
+```jsx
+{/* Keyword Cluster */}
+{cluster_keywords && cluster_keywords.length > 1 && (
+  <Card className="border-2">
+    <CardHeader>
+      <CardTitle className="text-lg">Keyword Cluster</CardTitle>
+      <CardDescription>
+        This article targets {cluster_keywords.length} related keywords
+      </CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      {/* Aggregate Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <div className="text-xs text-muted-foreground">Total Volume</div>
+          <div className="text-lg font-semibold">{cluster_stats.total_volume.toLocaleString()}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Avg Difficulty</div>
+          <div className="text-lg font-semibold">{cluster_stats.avg_difficulty}</div>
+        </div>
+      </div>
+
+      {/* Individual Keywords */}
+      <div className="space-y-2">
+        <div className="text-sm font-medium">Keywords in Cluster:</div>
+        {cluster_keywords.map((kw, index) => (
+          <div key={index} className="border rounded-lg p-2 bg-muted/30">
+            <div className="font-mono text-sm font-medium">{kw.keyword}</div>
+            <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+              <span>Vol: {kw.volume?.toLocaleString()}</span>
+              <span>Diff: {kw.difficulty}</span>
+              <span>Opp: {kw.opportunity}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </CardContent>
+  </Card>
+)}
+```
+
+### 12.6 Add Routes & Controllers
+
+```ruby
+# config/routes.rb
+resources :projects do
+  resources :keyword_researches, only: [] do
+    member do
+      post :expand # Expand research with more keywords
+    end
+  end
+end
+```
+
+```ruby
+# app/controllers/keyword_researches_controller.rb
+def expand
+  @research = current_user.projects.find(params[:project_id])
+                         .keyword_researches.find(params[:id])
+
+  # Check credits
+  unless current_user.has_credits?
+    redirect_to pricing_path, alert: "Upgrade to expand keyword research"
+    return
+  end
+
+  # Deduct credit
+  current_user.decrement!(:credits)
+
+  # Enqueue job
+  ExpandKeywordResearchJob.perform_later(@research.id)
+
+  redirect_to project_path(@research.project),
+              notice: "Finding more keywords... This will take 1-2 minutes."
+end
+```
+
+### 12.7 Cost Estimates
+
+**Competitive scraping (20 keywords × 10 pages each):**
+- Google Search API: Free (100 queries/day)
+- Page scraping: No cost (public data)
+- Keyword metrics calculation: Heuristic (free) or Google Ads API ($0)
+- Total cost: **Free** (uses existing APIs)
+
+**Expand research:**
+- Additional AI calls for variations: ~$0.05
+- Additional scraping: Free
+- Total cost per expansion: **~$0.05**
+
+**Credits:**
+- Competitive scraping: Included with initial research (runs automatically)
+- Expand research: Costs 1 credit
+
+### 12.8 Testing
+
+**Test scenarios:**
+- Initial research finds 30 keywords
+- Competitive scraper discovers 50+ more from top-ranking pages
+- "Expand Research" finds 100+ additional variations
+- Pagination works with 200+ keywords
+- Filters work correctly
+- Article page shows cluster keywords
+- Cluster stats calculate correctly
+
+**Acceptance:**
+- ✅ Initial research saves 100-200 keywords (not just 30)
+- ✅ Competitive scraper extracts keywords from top-ranking pages
+- ✅ "Find More Keywords" button expands research
+- ✅ Pagination shows 30 keywords per page
+- ✅ Filters work (difficulty, volume, intent)
+- ✅ Article page displays keyword cluster
+- ✅ Cluster shows individual keyword stats
+- ✅ Cluster shows aggregate stats (total volume, avg difficulty)
+- ✅ All features work within credit limits
 
 ---
 

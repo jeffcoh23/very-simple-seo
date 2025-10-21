@@ -1,0 +1,29 @@
+# Default voice profiles created for each user
+default_voices:
+  - name: "Professional"
+    description: "Write in a polished, business-appropriate tone. Use industry-standard terminology, maintain objectivity, and focus on credibility. Sentences should be clear and well-structured. Avoid casual language, slang, or overly personal anecdotes."
+    is_default: true
+
+  - name: "Casual"
+    description: "Write in a relaxed, conversational tone that feels like talking to a friend. Use contractions, everyday language, and personal examples. Keep it light and approachable without being unprofessional. You can use humor when appropriate."
+    is_default: false
+
+  - name: "Technical"
+    description: "Write with precision and technical depth. Use accurate terminology, include code examples when relevant, and explain complex concepts clearly. Target an audience familiar with technical concepts. Focus on accuracy and implementation details."
+    is_default: false
+
+  - name: "Conversational"
+    description: "Write as if speaking directly to one reader. Use 'you' and 'I' frequently. Ask rhetorical questions. Break down complex ideas into simple, digestible chunks. Maintain an engaging, dialogue-like flow while staying informative."
+    is_default: false
+
+  - name: "Formal"
+    description: "Write with academic or corporate formality. Use complete sentences, avoid contractions, and maintain professional distance. Structure content logically with clear topic sentences. Cite sources appropriately and maintain objectivity throughout."
+    is_default: false
+
+  - name: "Friendly"
+    description: "Write with warmth and approachability. Be encouraging and supportive. Use positive language and inclusive 'we' statements. Share relatable examples and show empathy for reader challenges. Balance friendliness with helpfulness."
+    is_default: false
+
+  - name: "Authoritative"
+    description: "Write with confidence and expertise. Make definitive statements backed by data or experience. Use strong, decisive language. Position yourself as a trusted expert. Provide clear recommendations and action steps."
+    is_default: false

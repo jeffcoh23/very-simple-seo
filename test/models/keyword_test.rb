@@ -133,4 +133,82 @@ class KeywordTest < ActiveSupport::TestCase
     keyword.update!(generation_status: :failed)
     assert keyword.failed?
   end
+
+  # Clustering - Scopes
+  test "cluster_representatives scope returns only cluster representatives" do
+    rep = @research.keywords.create!(keyword: "seo tools", volume: 1000, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: true)
+    member = @research.keywords.create!(keyword: "tools for seo", volume: 100, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: false)
+    unclustered = @research.keywords.create!(keyword: "other keyword", volume: 100, difficulty: 50, opportunity: 75)
+
+    assert_equal [ rep ], @research.keywords.cluster_representatives.to_a
+  end
+
+  test "in_cluster scope returns keywords in specific cluster" do
+    k1 = @research.keywords.create!(keyword: "seo tools", volume: 1000, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: true)
+    k2 = @research.keywords.create!(keyword: "tools for seo", volume: 100, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: false)
+    k3 = @research.keywords.create!(keyword: "other keyword", volume: 100, difficulty: 50, opportunity: 75, cluster_id: 2, is_cluster_representative: true)
+
+    assert_equal [ k1, k2 ], @research.keywords.in_cluster(1).order(:id).to_a
+  end
+
+  test "unclustered scope returns keywords without cluster_id" do
+    clustered = @research.keywords.create!(keyword: "seo tools", volume: 1000, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: true)
+    unclustered = @research.keywords.create!(keyword: "other keyword", volume: 100, difficulty: 50, opportunity: 75)
+
+    assert_equal [ unclustered ], @research.keywords.unclustered.to_a
+  end
+
+  # Clustering - Helper methods
+  test "clustered? returns true when cluster_id is present" do
+    keyword = @research.keywords.create!(keyword: "seo tools", volume: 1000, difficulty: 50, opportunity: 75, cluster_id: 1)
+    assert keyword.clustered?
+  end
+
+  test "clustered? returns false when cluster_id is nil" do
+    keyword = @research.keywords.create!(keyword: "other keyword", volume: 100, difficulty: 50, opportunity: 75)
+    assert_not keyword.clustered?
+  end
+
+  test "cluster_siblings returns other keywords in same cluster" do
+    rep = @research.keywords.create!(keyword: "seo tools", volume: 1000, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: true)
+    sibling1 = @research.keywords.create!(keyword: "tools for seo", volume: 100, difficulty: 50, opportunity: 75, cluster_id: 1)
+    sibling2 = @research.keywords.create!(keyword: "seo tool", volume: 50, difficulty: 50, opportunity: 75, cluster_id: 1)
+    other_cluster = @research.keywords.create!(keyword: "other", volume: 100, difficulty: 50, opportunity: 75, cluster_id: 2)
+
+    siblings = rep.cluster_siblings.order(:id).to_a
+    assert_equal 2, siblings.length
+    assert_includes siblings, sibling1
+    assert_includes siblings, sibling2
+    assert_not_includes siblings, rep
+    assert_not_includes siblings, other_cluster
+  end
+
+  test "cluster_siblings returns empty relation for unclustered keyword" do
+    keyword = @research.keywords.create!(keyword: "unclustered", volume: 100, difficulty: 50, opportunity: 75)
+    assert_equal [], keyword.cluster_siblings.to_a
+  end
+
+  test "cluster_representative returns the cluster representative" do
+    rep = @research.keywords.create!(keyword: "seo tools", volume: 1000, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: true)
+    member = @research.keywords.create!(keyword: "tools for seo", volume: 100, difficulty: 50, opportunity: 75, cluster_id: 1)
+
+    assert_equal rep, member.cluster_representative
+  end
+
+  test "cluster_representative returns nil for unclustered keyword" do
+    keyword = @research.keywords.create!(keyword: "unclustered", volume: 100, difficulty: 50, opportunity: 75)
+    assert_nil keyword.cluster_representative
+  end
+
+  test "cluster_members returns all keywords in cluster including self" do
+    rep = @research.keywords.create!(keyword: "seo tools", volume: 1000, difficulty: 50, opportunity: 75, cluster_id: 1, is_cluster_representative: true)
+    member1 = @research.keywords.create!(keyword: "tools for seo", volume: 100, difficulty: 50, opportunity: 75, cluster_id: 1)
+    member2 = @research.keywords.create!(keyword: "seo tool", volume: 50, difficulty: 50, opportunity: 75, cluster_id: 1)
+
+    members = rep.cluster_members.order(:id).to_a
+    assert_equal 3, members.length
+    assert_includes members, rep
+    assert_includes members, member1
+    assert_includes members, member2
+  end
 end

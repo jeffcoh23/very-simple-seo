@@ -3,8 +3,14 @@ pay_customer default_payment_processor: :stripe
   has_secure_password
   has_many :sessions, dependent: :destroy
   has_many :projects, dependent: :destroy
+  has_many :voice_profiles, dependent: :destroy
+
+  accepts_nested_attributes_for :voice_profiles, allow_destroy: true
 
   normalizes :email_address, with: ->(e) { e.strip.downcase }
+
+  # Callbacks
+  after_create :create_default_voice_profiles
 
 # Validations
 validates :first_name, presence: true
@@ -102,6 +108,11 @@ def reset_credits_to_plan!
   update!(credits: PlansService.credits_for_plan(current_subscription&.processor_plan))
 end
 
+# Voice profile helpers
+def default_voice
+  voice_profiles.find_by(is_default: true) || voice_profiles.first
+end
+
 private
 
 def password_required?
@@ -111,5 +122,19 @@ end
 
 def subscription_plan_name(subscription)
   PlansService.plan_name(subscription&.processor_plan)
+end
+
+def create_default_voice_profiles
+  config = YAML.load_file(Rails.root.join("config", "voice_profiles.yml"))
+  default_voices = config["default_voices"]
+
+  default_voices.each do |voice_data|
+    voice_profiles.create!(
+      name: voice_data["name"],
+      description: voice_data["description"],
+      is_default: voice_data["is_default"],
+      is_system: false
+    )
+  end
 end
 end

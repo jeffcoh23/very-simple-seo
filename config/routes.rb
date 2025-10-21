@@ -1,7 +1,6 @@
 Rails.application.routes.draw do
   get "/settings", to: "settings#show"
-  patch "/settings/profile", to: "settings#update_profile"
-  patch "/settings/password", to: "settings#update_password"
+  patch "/settings", to: "settings#update"
   get "/app", to: "dashboard#index"
 
   # Projects and Articles

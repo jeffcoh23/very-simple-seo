@@ -6,11 +6,15 @@ import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { ArrowLeft, Loader2, TrendingUp, Eye, Star, FileText, ChevronDown, ChevronUp, Filter, X, Key } from "lucide-react"
+import { ArrowLeft, Loader2, TrendingUp, Eye, Star, FileText, ChevronDown, ChevronUp, Filter, X, Key, FolderTree } from "lucide-react"
 
 export default function ProjectsShow() {
-  const { project, keywordResearch, keywords, articles } = usePage().props
+  const { project, keywordResearch, clusters, keywords, articles, stats } = usePage().props
   const { routes, auth } = usePage().props
+
+  // Get active tab from URL or default to clusters
+  const searchParams = new URLSearchParams(window.location.search)
+  const activeTab = searchParams.get('tab') || 'clusters'
 
   const [researchStatus, setResearchStatus] = useState(keywordResearch?.status)
   const [keywordsFound, setKeywordsFound] = useState(keywordResearch?.total_keywords_found || 0)
@@ -23,6 +27,7 @@ export default function ProjectsShow() {
   const [intentFilter, setIntentFilter] = useState("all")
   const [difficultyFilter, setDifficultyFilter] = useState("all")
   const [sortBy, setSortBy] = useState("opportunity")
+  const [expandedClusters, setExpandedClusters] = useState(new Set())
 
   // Auto-scroll progress log when new messages arrive
   useEffect(() => {
@@ -157,6 +162,27 @@ export default function ProjectsShow() {
   const clearFilters = () => {
     setIntentFilter("all")
     setDifficultyFilter("all")
+  }
+
+  // Handle tab change
+  const handleTabChange = (newTab) => {
+    router.visit(`${project.routes.project}?tab=${newTab}`, {
+      preserveState: true,
+      preserveScroll: true
+    })
+  }
+
+  // Toggle cluster expansion
+  const toggleCluster = (clusterId) => {
+    setExpandedClusters(prev => {
+      const next = new Set(prev)
+      if (next.has(clusterId)) {
+        next.delete(clusterId)
+      } else {
+        next.add(clusterId)
+      }
+      return next
+    })
   }
 
   return (
@@ -294,9 +320,13 @@ export default function ProjectsShow() {
           </Card>
         )}
 
-        {/* Keywords & Articles Tabs */}
-        <Tabs defaultValue="keywords" className="w-full">
+        {/* Clusters, Keywords & Articles Tabs */}
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="border-2">
+            <TabsTrigger value="clusters" className="flex items-center gap-2">
+              <FolderTree className="h-4 w-4" />
+              Clusters ({stats.clusters_count})
+            </TabsTrigger>
             <TabsTrigger value="keywords" className="flex items-center gap-2">
               <Key className="h-4 w-4" />
               Keywords ({project.keywords_count})
@@ -307,23 +337,166 @@ export default function ProjectsShow() {
             </TabsTrigger>
           </TabsList>
 
+          {/* Clusters Tab */}
+          <TabsContent value="clusters">
+            <Card className="border-2">
+              <CardHeader>
+                <CardTitle>Keyword Clusters</CardTitle>
+                <CardDescription>
+                  Groups of similar keywords with aggregated metrics. Click to expand and see variations.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {clusters.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No keyword clusters found yet.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b-2">
+                            <th className="text-left py-3 px-4 font-semibold text-sm">Cluster Name</th>
+                            <th className="text-center py-3 px-4 font-semibold text-sm">Keywords</th>
+                            <th className="text-center py-3 px-4 font-semibold text-sm">Total Volume</th>
+                            <th className="text-center py-3 px-4 font-semibold text-sm">Avg Difficulty</th>
+                            <th className="text-center py-3 px-4 font-semibold text-sm">Avg Opportunity</th>
+                            <th className="text-right py-3 px-4 font-semibold text-sm">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {clusters.map((cluster) => {
+                            const isExpanded = expandedClusters.has(cluster.id)
+                            const difficultyBadge = getDifficultyBadge(cluster.avg_difficulty)
+
+                            return (
+                              <>
+                                <tr
+                                  key={cluster.id}
+                                  className="border-b-2 hover:bg-muted/50 transition-colors cursor-pointer"
+                                  onClick={() => toggleCluster(cluster.id)}
+                                >
+                                  <td className="py-3 px-4">
+                                    <div className="flex items-center gap-2">
+                                      {isExpanded ? (
+                                        <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                      ) : (
+                                        <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                      )}
+                                      <span className="font-medium">{cluster.representative_keyword}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <Badge variant="outline" className="border-2">
+                                      {cluster.keywords_count} keywords
+                                    </Badge>
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    {cluster.total_volume.toLocaleString()}
+                                    {cluster.volume_estimated && <sup className="text-warning ml-1">*</sup>}
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <Badge className={difficultyBadge.color}>
+                                      {difficultyBadge.label} ({cluster.avg_difficulty})
+                                    </Badge>
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <TrendingUp className="h-4 w-4 text-success" />
+                                      <span className="font-semibold">{cluster.avg_opportunity}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                    <Link href={cluster.new_article_url}>
+                                      <Button
+                                        size="sm"
+                                        className="border-2 shadow-md hover:shadow-lg"
+                                        disabled={!auth.user.has_credits}
+                                      >
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Generate Article
+                                      </Button>
+                                    </Link>
+                                  </td>
+                                </tr>
+
+                                {/* Expanded cluster members */}
+                                {isExpanded && cluster.members.map((member) => {
+                                  const memberDifficultyBadge = getDifficultyBadge(member.difficulty)
+
+                                  return (
+                                    <tr key={member.id} className="border-b bg-muted/30">
+                                      <td className="py-2 px-4 pl-12">
+                                        <span className="text-sm font-mono">{member.keyword}</span>
+                                      </td>
+                                      <td className="py-2 px-4 text-center">
+                                        <Badge className={getIntentBadge(member.intent)} size="sm">
+                                          {member.intent}
+                                        </Badge>
+                                      </td>
+                                      <td className="py-2 px-4 text-center text-sm">
+                                        {member.volume ? member.volume.toLocaleString() : "—"}
+                                      </td>
+                                      <td className="py-2 px-4 text-center">
+                                        <Badge className={memberDifficultyBadge.color} size="sm">
+                                          {memberDifficultyBadge.label} ({member.difficulty})
+                                        </Badge>
+                                      </td>
+                                      <td className="py-2 px-4 text-center">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <TrendingUp className="h-3 w-3 text-success" />
+                                          <span className="text-sm font-semibold">{member.opportunity}</span>
+                                        </div>
+                                      </td>
+                                      <td className="py-2 px-4 text-right text-sm text-muted-foreground">
+                                        {member.cpc ? `$${Number(member.cpc).toFixed(2)}` : "—"}
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {clusters.length > 0 && (
+                      <div className="mt-4 text-sm text-muted-foreground">
+                        <p className="text-center">
+                          Showing {clusters.length} cluster{clusters.length !== 1 ? 's' : ''} covering {stats.total_keywords - stats.unclustered_count} keywords
+                        </p>
+                        <p className="text-center mt-2">
+                          <sup className="text-warning">*</sup> Asterisk indicates estimated volume data (Google Ads API data not available)
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Keywords Tab */}
           <TabsContent value="keywords">
             <Card className="border-2">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Keywords</CardTitle>
+                    <CardTitle>All Keywords</CardTitle>
                     <CardDescription>
-                      Top keyword opportunities for your content strategy
+                      Complete list of keywords including cluster representatives and individual keywords
                     </CardDescription>
                   </div>
-                  {activeFiltersCount > 0 && (
-                    <Button variant="outline" size="sm" onClick={clearFilters} className="border-2">
-                      <X className="h-4 w-4 mr-2" />
-                      Clear {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''}
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {activeFiltersCount > 0 && (
+                      <Button variant="outline" size="sm" onClick={clearFilters} className="border-2">
+                        <X className="h-4 w-4 mr-2" />
+                        Clear {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -447,7 +620,10 @@ export default function ProjectsShow() {
                             const difficultyBadge = getDifficultyBadge(keyword.difficulty)
 
                             return (
-                              <tr key={keyword.id} className="border-b-2 hover:bg-muted/50 transition-colors">
+                              <tr
+                                key={keyword.id}
+                                className="border-b-2 hover:bg-muted/50 transition-colors"
+                              >
                                 <td className="py-3 px-4">
                                   <div className="flex items-center gap-2">
                                     {keyword.starred && (

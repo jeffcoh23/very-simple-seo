@@ -40,6 +40,7 @@ inertia_share flash: -> { flash.to_hash },
                  app: current_user ? "/app" : nil,
                  logout: current_user ? sign_out_path : nil,
                  settings: current_user ? "/settings" : nil,
+                 update_settings: current_user ? "/settings" : nil,
                  billing_portal: current_user ? "/billing/portal" : nil,
 
                  # Project routes

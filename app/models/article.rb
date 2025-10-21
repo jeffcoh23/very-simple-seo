@@ -1,6 +1,7 @@
 class Article < ApplicationRecord
   belongs_to :keyword
   belongs_to :project
+  belongs_to :voice_profile, optional: true
 
   enum :status, { pending: 0, generating: 1, completed: 2, failed: 3 }
 
