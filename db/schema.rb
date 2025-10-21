@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_20_005726) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_21_012153) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -31,9 +31,11 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_20_005726) do
     t.text "error_message"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "voice_profile_id"
     t.index ["keyword_id"], name: "index_articles_on_keyword_id", unique: true
     t.index ["project_id"], name: "index_articles_on_project_id"
     t.index ["status"], name: "index_articles_on_status"
+    t.index ["voice_profile_id"], name: "index_articles_on_voice_profile_id"
   end
 
   create_table "competitors", force: :cascade do |t|
@@ -382,8 +384,23 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_20_005726) do
     t.index ["email_address"], name: "index_users_on_email_address", unique: true
   end
 
+  create_table "voice_profiles", force: :cascade do |t|
+    t.bigint "user_id"
+    t.string "name", null: false
+    t.text "description", null: false
+    t.text "sample_text"
+    t.boolean "is_default", default: false, null: false
+    t.boolean "is_system", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["is_system"], name: "index_voice_profiles_on_is_system"
+    t.index ["user_id", "is_default"], name: "index_voice_profiles_on_user_id_and_is_default"
+    t.index ["user_id"], name: "index_voice_profiles_on_user_id"
+  end
+
   add_foreign_key "articles", "keywords"
   add_foreign_key "articles", "projects"
+  add_foreign_key "articles", "voice_profiles"
   add_foreign_key "competitors", "projects"
   add_foreign_key "keyword_researches", "projects"
   add_foreign_key "keywords", "keyword_researches"
@@ -399,4 +416,5 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_20_005726) do
   add_foreign_key "solid_queue_ready_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
+  add_foreign_key "voice_profiles", "users"
 end

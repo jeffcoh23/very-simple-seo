@@ -16,7 +16,8 @@ class ArticlesController < ApplicationController
       keyword: keyword_props(@keyword),
       project: project_props_detailed(@keyword.project),
       user_credits: current_user.credits,
-      estimated_cost: 0.22 # Average cost per article
+      estimated_cost: 0.22, # Average cost per article
+      voice_profiles: current_user.voice_profiles.order(is_default: :desc, name: :asc).map { |v| voice_profile_props(v) }
     }
   end
 
@@ -38,11 +39,13 @@ class ArticlesController < ApplicationController
 
     # Create article and start generation
     target_word_count = params[:target_word_count]&.to_i || 2000
+    voice_profile_id = params[:voice_profile_id] || current_user.default_voice&.id
 
     @article = @project.articles.create!(
       keyword: @keyword,
       status: :pending,
-      target_word_count: target_word_count
+      target_word_count: target_word_count,
+      voice_profile_id: voice_profile_id
     )
 
     # Deduct a credit
@@ -198,6 +201,15 @@ class ArticlesController < ApplicationController
       tone_of_voice: project.tone_of_voice,
       call_to_actions: project.call_to_actions,
       routes: project_routes(project)
+    }
+  end
+
+  def voice_profile_props(voice)
+    {
+      id: voice.id,
+      name: voice.name,
+      description: voice.description,
+      is_default: voice.is_default
     }
   end
 end

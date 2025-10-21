@@ -112,20 +112,28 @@ class ArticleGenerationJob < ApplicationJob
   end
 
   def generate_outline(serp_data)
-    # Voice profile is NOT used for outlines, only for writing
+    # Pass voice profile and project for context
+    voice_profile_description = @article.voice_profile&.description
     service = ArticleOutlineService.new(
       @article.keyword.keyword,
       serp_data,
-      voice_profile: nil,
-      target_word_count: @article.target_word_count
+      voice_profile: voice_profile_description,
+      target_word_count: @article.target_word_count,
+      project: @article.project
     )
     service.perform
   end
 
   def write_article(outline, serp_data)
-    # Voice profile is on User model, not Project
-    voice_profile = @article.project.user.voice_profile
-    service = ArticleWriterService.new(@article.keyword.keyword, outline, serp_data, voice_profile: voice_profile)
+    # Get voice profile description from article's associated voice_profile
+    voice_profile_description = @article.voice_profile&.description
+    service = ArticleWriterService.new(
+      @article.keyword.keyword,
+      outline,
+      serp_data,
+      voice_profile: voice_profile_description,
+      project: @article.project
+    )
     service.perform
   end
 

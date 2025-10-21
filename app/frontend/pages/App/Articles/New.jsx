@@ -11,10 +11,11 @@ import {
 } from "lucide-react"
 
 export default function ArticlesNew() {
-  const { keyword, project, user_credits, estimated_cost } = usePage().props
+  const { keyword, project, user_credits, estimated_cost, voice_profiles } = usePage().props
   const { routes } = usePage().props
 
   const [targetWordCount, setTargetWordCount] = useState(2000)
+  const [selectedVoiceId, setSelectedVoiceId] = useState(voice_profiles?.find(v => v.is_default)?.id || voice_profiles?.[0]?.id)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleGenerate = () => {
@@ -29,7 +30,8 @@ export default function ArticlesNew() {
       project.routes.create_article,
       {
         keyword_id: keyword.id,
-        target_word_count: targetWordCount
+        target_word_count: targetWordCount,
+        voice_profile_id: selectedVoiceId
       },
       {
         onFinish: () => setIsSubmitting(false)
@@ -160,6 +162,28 @@ export default function ArticlesNew() {
               </select>
               <p className="text-sm text-muted-foreground mt-2">
                 Longer articles tend to rank better for competitive keywords
+              </p>
+            </div>
+
+            {/* Voice Profile */}
+            <div>
+              <Label htmlFor="voice-profile" className="text-base font-semibold mb-3 block">
+                Writing Voice
+              </Label>
+              <select
+                id="voice-profile"
+                value={selectedVoiceId}
+                onChange={(e) => setSelectedVoiceId(e.target.value)}
+                className="w-full border-2 border-border rounded-lg px-4 py-3 text-base bg-white"
+              >
+                {voice_profiles?.map((voice) => (
+                  <option key={voice.id} value={voice.id}>
+                    {voice.name} {voice.is_default ? '(Default)' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-muted-foreground mt-2">
+                Choose a voice profile to match your writing style. Manage profiles in Settings.
               </p>
             </div>
 
